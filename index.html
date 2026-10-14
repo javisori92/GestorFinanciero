@@ -666,11 +666,11 @@
 
                     <div class="nav-section-divider" aria-hidden="true"></div>
                     <div class="nav-group">
-                        <button type="button" class="nav-group-toggle" id="nav-group-management-toggle" aria-expanded="true" aria-controls="nav-group-management" onclick="app.toggleNavGroup('management')">
+                        <button type="button" class="nav-group-toggle" id="nav-group-management-toggle" aria-expanded="false" aria-controls="nav-group-management" onclick="app.toggleNavGroup('management')">
                             <span class="flex items-center gap-2.5"><i class="fa-solid fa-wallet w-4 text-center" aria-hidden="true"></i><span>Gestión Financiera</span></span>
-                            <i class="fa-solid fa-chevron-down nav-group-chevron" aria-hidden="true"></i>
+                            <i class="fa-solid fa-chevron-right nav-group-chevron" aria-hidden="true"></i>
                         </button>
-                        <div id="nav-group-management" class="nav-submenu" role="group" aria-label="Gestión financiera">
+                        <div id="nav-group-management" class="nav-submenu" role="group" aria-label="Gestión financiera" hidden>
                             <button onclick="app.switchTab('transactions')" id="nav-transactions" class="nav-btn nav-sub-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-300 hover:bg-white/10 hover:text-white transition">
                                 <i class="fa-solid fa-receipt w-4 text-center text-apple-green"></i><span>Transacciones</span>
                             </button>
@@ -1002,23 +1002,49 @@
 
                 <!-- ================= TAB: GASTOS POR CATEGORÍA ================= -->
                 <div id="tab-category-expenses" class="tab-content space-y-6 hidden">
-                    <!-- Resumen mensual de gastos por categoría -->
+                    <!-- Resumen del mes -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                            <div class="text-xs text-gray-400 mb-1">Gasto total del mes</div>
+                            <div class="text-xl font-bold text-white" id="ce-total-amount">—</div>
+                            <div class="text-xs text-gray-400 mt-1" id="ce-total-note"></div>
+                        </div>
+                        <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                            <div class="text-xs text-gray-400 mb-1">Categoría principal</div>
+                            <div class="text-xl font-bold text-white truncate" id="ce-top-name">—</div>
+                            <div class="text-xs text-gray-400 mt-1" id="ce-top-note"></div>
+                        </div>
+                        <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                            <div class="text-xs text-gray-400 mb-1">Categorías con gasto</div>
+                            <div class="text-xl font-bold text-white" id="ce-count">—</div>
+                            <div class="text-xs text-gray-400 mt-1" id="ce-count-note"></div>
+                        </div>
+                    </div>
+
+                    <!-- Lo que más subió y lo que más bajó -->
+                    <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                        <p class="text-xs text-gray-300 leading-relaxed" id="ce-highlights"></p>
+                    </div>
+
+                    <!-- Tabla de gastos por categoría -->
                     <div class="glass-panel p-5 rounded-2xl border border-white/10 space-y-3">
                         <div>
                             <h3 class="text-sm font-semibold text-white">Gastos por categoría</h3>
-                            <p class="text-xs text-gray-400">Distribución del gasto del mes seleccionado y variación respecto al mes anterior.</p>
+                            <p class="text-xs text-gray-400">Distribución del gasto del mes seleccionado, ejecución del presupuesto y variación respecto al mes anterior. Pulsa una categoría para ver sus movimientos.</p>
                         </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-xs">
                                 <thead class="bg-white/5 text-gray-400 uppercase text-[10px]">
                                     <tr>
-                                        <th class="p-3">Nombre de categoría</th>
-                                        <th class="p-3 text-right">Gasto total del mes</th>
+                                        <th class="p-3">Categoría</th>
+                                        <th class="p-3 text-right">Gasto del mes</th>
                                         <th class="p-3 text-right">% del gasto mensual</th>
+                                        <th class="p-3 text-right">Presupuesto</th>
                                         <th class="p-3 text-right">Comparativa con el mes anterior</th>
                                     </tr>
                                 </thead>
                                 <tbody id="categories-monthly-summary-tbody" class="divide-y divide-white/5"></tbody>
+                                <tfoot id="ce-tfoot" class="border-t border-white/10"></tfoot>
                             </table>
                         </div>
                         <div id="categories-monthly-summary-empty" class="hidden p-5 text-center text-gray-500 text-xs">
@@ -1252,7 +1278,7 @@
                             </div>
                             <div>
                                 <h3 class="text-sm font-semibold text-white">Pagos y cobros recurrentes</h3>
-                                <p class="text-xs text-gray-400">Se calculan con los movimientos marcados como mensuales o anuales (los anuales se prorratean por mes).</p>
+                                <p class="text-xs text-gray-400">Suma todos los ingresos y gastos marcados como mensuales o anuales (los anuales se prorratean por mes). Si repites el mismo concepto cada mes, cuenta solo el último mes registrado.</p>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -2068,20 +2094,24 @@
                 const navBtn = document.getElementById(`nav-${tabName}`);
                 if (navBtn) navBtn.classList.add('bg-white/15', 'text-white', 'shadow-md');
 
-                const parentGroup = ({ dashboard: 'management', transactions: 'management', categories: 'management', analysis: 'analysis', 'category-expenses': 'analysis', insights: 'analysis', settings: 'system' })[tabName];
-                ['management', 'analysis', 'system'].forEach(groupName => {
-                    const toggle = document.getElementById(`nav-group-${groupName}-toggle`);
-                    const submenu = document.getElementById(`nav-group-${groupName}`);
-                    if (!toggle || !submenu) return;
-                    const shouldOpen = groupName === parentGroup;
-                    toggle.setAttribute('aria-expanded', String(shouldOpen));
-                    submenu.hidden = !shouldOpen;
-                    const chevron = toggle.querySelector('.nav-group-chevron');
-                    if (chevron) {
-                        chevron.classList.toggle('fa-chevron-down', shouldOpen);
-                        chevron.classList.toggle('fa-chevron-right', !shouldOpen);
-                    }
-                });
+                const parentGroup = ({ transactions: 'management', categories: 'management', analysis: 'analysis', 'category-expenses': 'analysis', insights: 'analysis', settings: 'system' })[tabName];
+                // Al abrir una sección de un grupo se despliega ese grupo y se pliegan los demás.
+                // El Panel Principal no pertenece a ningún grupo: no modifica el estado de los desplegables.
+                if (parentGroup) {
+                    ['management', 'analysis', 'system'].forEach(groupName => {
+                        const toggle = document.getElementById(`nav-group-${groupName}-toggle`);
+                        const submenu = document.getElementById(`nav-group-${groupName}`);
+                        if (!toggle || !submenu) return;
+                        const shouldOpen = groupName === parentGroup;
+                        toggle.setAttribute('aria-expanded', String(shouldOpen));
+                        submenu.hidden = !shouldOpen;
+                        const chevron = toggle.querySelector('.nav-group-chevron');
+                        if (chevron) {
+                            chevron.classList.toggle('fa-chevron-down', shouldOpen);
+                            chevron.classList.toggle('fa-chevron-right', !shouldOpen);
+                        }
+                    });
+                }
 
                 const titles = {
                     dashboard: 'Panel Principal',
@@ -2233,33 +2263,40 @@
             }
 
             // ---------- Recurrencia ----------
-            // Agrupa los movimientos marcados como mensuales/anuales en "series" (mismo tipo, categoría,
-            // recurrencia y concepto) y se queda con el último movimiento de cada serie como plantilla.
-            // Una serie solo se considera activa si su último movimiento es reciente: hasta 2 meses atrás
-            // para las mensuales y hasta 12 para las anuales.
+            // Cada ingreso o gasto marcado como mensual/anual es un "compromiso". Si el mismo concepto
+            // (mismo tipo, categoría y recurrencia) se repite en varios meses, cuenta solo el último mes
+            // registrado; pero TODOS los movimientos de ese concepto dentro de ese mes cuentan por separado,
+            // así que dos ingresos mensuales distintos nunca se pisan entre sí.
+            // Un compromiso se da por activo mientras su último registro tenga como máximo 12 meses
+            // (mensuales) o 24 meses (anuales); pasado ese tiempo se considera cancelado.
             getRecurringSeries(refDate = new Date(), { includeFuture = false } = {}) {
                 const refKey = this.monthKeyFromDate(refDate);
                 const [refYear, refMonth] = refKey.split('-').map(Number);
                 const refIndex = refYear * 12 + refMonth;
                 const cutoff = includeFuture ? '9999-12-31' : this.localDateInputValue(new Date(refYear, refMonth, 0));
-                const latest = new Map();
+                const groups = new Map();
                 this.db.transactions.forEach(tx => {
                     if (!this.isRecurringTx(tx) || !isValidISODate(tx.date) || tx.date > cutoff) return;
                     const key = [tx.type, tx.category, tx.recurrence, this.normalizeConcept(tx.concept)].join('|');
-                    const current = latest.get(key);
-                    if (!current || tx.date > current.date) latest.set(key, tx);
+                    const month = tx.date.slice(0, 7);
+                    const group = groups.get(key);
+                    if (!group || month > group.month) groups.set(key, { month, txs: [tx] });
+                    else if (month === group.month) group.txs.push(tx);
                 });
                 const series = [];
-                latest.forEach((tx, key) => {
-                    const amount = Number(tx.amount) || 0;
-                    if (amount <= 0) return;
-                    const [lastYear, lastMonth] = tx.date.slice(0, 7).split('-').map(Number);
+                groups.forEach((group, key) => {
+                    const [lastYear, lastMonth] = group.month.split('-').map(Number);
                     const gap = refIndex - (lastYear * 12 + lastMonth);
-                    if (gap > (tx.recurrence === 'monthly' ? 2 : 12)) return;
-                    series.push({
-                        key, tx, type: tx.type, recurrence: tx.recurrence, amount,
-                        monthlyAmount: tx.recurrence === 'annual' ? amount / 12 : amount,
-                        lastDate: tx.date
+                    const first = group.txs[0];
+                    if (gap > (first.recurrence === 'monthly' ? 12 : 24)) return;
+                    group.txs.forEach((tx, position) => {
+                        const amount = Number(tx.amount) || 0;
+                        if (amount <= 0) return;
+                        series.push({
+                            key: `${key}#${position}`, tx, type: tx.type, recurrence: tx.recurrence, amount,
+                            monthlyAmount: tx.recurrence === 'annual' ? amount / 12 : amount,
+                            lastDate: tx.date
+                        });
                     });
                 });
                 return series;
@@ -2273,14 +2310,38 @@
                 return { series, income, expense, net: income - expense };
             }
 
-            // Próxima fecha prevista de cada serie activa (un mes o un año después de su último movimiento).
-            getRecurringDue(today = new Date()) {
+            // Calendario de vencimientos de los próximos `horizonDays` días: todas las fechas previstas de
+            // todos los compromisos activos. Un compromiso mensual puede aparecer dos veces si le tocan dos
+            // fechas dentro del periodo. La primera fecha anterior a hoy y sin registrar se marca como pendiente.
+            getRecurringDue(today = new Date(), horizonDays = 45) {
                 const todayISO = this.localDateInputValue(today);
-                return this.getRecurringSeries(today, { includeFuture: true }).map(item => {
-                    const due = this.addMonthsClamped(item.lastDate, item.recurrence === 'annual' ? 12 : 1);
-                    const dueISO = this.localDateInputValue(due);
-                    return { ...item, dueISO, overdue: dueISO < todayISO };
-                }).sort((a, b) => a.dueISO.localeCompare(b.dueISO));
+                const horizonISO = this.localDateInputValue(new Date(today.getFullYear(), today.getMonth(), today.getDate() + horizonDays));
+                const currentIndex = today.getFullYear() * 12 + today.getMonth();
+                const dueItems = [];
+                this.getRecurringSeries(today, { includeFuture: true }).forEach(item => {
+                    const [lastYear, lastMonth, lastDay] = item.lastDate.split('-').map(Number);
+                    const lastIndex = lastYear * 12 + (lastMonth - 1);
+                    let due;
+                    if (item.recurrence === 'monthly') {
+                        // Si este mes todavía no está registrado, toca este mes; si ya lo está, el siguiente.
+                        due = lastIndex < currentIndex
+                            ? this.addMonthsClamped(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`, 0)
+                            : this.addMonthsClamped(item.lastDate, 1);
+                    } else {
+                        due = this.addMonthsClamped(item.lastDate, 12);
+                    }
+                    let dueISO = this.localDateInputValue(due);
+                    let first = true;
+                    let guard = 0;
+                    while (dueISO <= horizonISO && guard++ < 6) {
+                        dueItems.push({ ...item, dueISO, overdue: first && dueISO < todayISO });
+                        if (item.recurrence !== 'monthly') break;
+                        due = this.addMonthsClamped(dueISO, 1);
+                        dueISO = this.localDateInputValue(due);
+                        first = false;
+                    }
+                });
+                return dueItems.sort((a, b) => a.dueISO.localeCompare(b.dueISO) || b.amount - a.amount);
             }
 
             // Media mensual de ingresos y gastos NO recurrentes de los últimos 3 meses cerrados
@@ -2348,9 +2409,7 @@
                     netElement.classList.add(summary.net > 0 ? 'text-apple-green' : summary.net < 0 ? 'text-apple-red' : 'text-white');
                 }
 
-                const today = new Date();
-                const horizonISO = this.localDateInputValue(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 45));
-                this.recurringDueItems = dueItems.filter(item => item.dueISO <= horizonISO).slice(0, 8);
+                this.recurringDueItems = dueItems;
                 const list = document.getElementById('recurring-upcoming-list');
                 const empty = document.getElementById('recurring-empty');
                 if (!list || !empty) return;
@@ -2997,60 +3056,231 @@
             }
 
             renderCategoryExpensesTab() {
-                this.renderCategoriesMonthlySummary(this.getTransactionsForMonth(this.selectedMonth));
-            }
-
-            renderCategoriesMonthlySummary(currentTxs) {
                 const tbody = document.getElementById('categories-monthly-summary-tbody');
+                const tfoot = document.getElementById('ce-tfoot');
                 const empty = document.getElementById('categories-monthly-summary-empty');
-                if (!tbody || !empty) return;
-                tbody.innerHTML = '';
+                if (!tbody || !tfoot || !empty) return;
+                if (!this.expandedCategoryExpenses) this.expandedCategoryExpenses = new Set();
+
+                const fmt = value => this.formatCurrency(value);
+                const sumOf = list => list.reduce((acc, tx) => acc + (Number(tx.amount) || 0), 0);
+                const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+                const setTone = (id, tone) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.classList.remove('text-white', 'text-gray-400', 'text-apple-green', 'text-apple-red');
+                    el.classList.add(tone);
+                };
 
                 const [year, month] = this.selectedMonth.split('-').map(Number);
-                const previousMonth = this.monthKeyFromDate(new Date(year, month - 2, 1));
-                const previousTxs = this.getTransactionsForMonth(previousMonth);
-                const totalMonthlyExpenses = currentTxs
-                    .filter(tx => tx.type === 'expense')
-                    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+                const previousKey = this.monthKeyFromDate(new Date(year, month - 2, 1));
+                const previousLabel = this.monthLabelLong(previousKey);
+                const currentTxs = this.getTransactionsForMonth(this.selectedMonth).filter(tx => tx.type === 'expense');
+                const previousTxs = this.getTransactionsForMonth(previousKey).filter(tx => tx.type === 'expense');
+                const totalSpent = sumOf(currentTxs);
+                const totalPrevious = sumOf(previousTxs);
 
-                const rows = this.db.categories
-                    .filter(category => category.type === 'expense')
-                    .map(category => {
-                        const spent = currentTxs
-                            .filter(tx => tx.type === 'expense' && tx.category === category.id)
-                            .reduce((sum, tx) => sum + Number(tx.amount), 0);
-                        const previousSpent = previousTxs
-                            .filter(tx => tx.type === 'expense' && tx.category === category.id)
-                            .reduce((sum, tx) => sum + Number(tx.amount), 0);
-                        return { category, spent, previousSpent };
-                    })
-                    .sort((a, b) => b.spent - a.spent || a.category.name.localeCompare(b.category.name, 'es', { sensitivity: 'base' }));
+                // Una fila por categoría de gasto (más una fila "Sin categoría" si hay gastos huérfanos).
+                const expenseCategories = this.db.categories.filter(c => c.type === 'expense');
+                const knownIds = new Set(expenseCategories.map(c => c.id));
+                const rows = expenseCategories.map(category => {
+                    const txs = currentTxs.filter(tx => tx.category === category.id);
+                    return {
+                        id: category.id, name: category.name, icon: category.icon || '🏷️', color: category.color || '#0A84FF',
+                        txs, spent: sumOf(txs), previousSpent: sumOf(previousTxs.filter(tx => tx.category === category.id)),
+                        budget: Number(category.budget) || 0
+                    };
+                });
+                const orphanTxs = currentTxs.filter(tx => !knownIds.has(tx.category));
+                const orphanPrevious = previousTxs.filter(tx => !knownIds.has(tx.category));
+                if (orphanTxs.length || orphanPrevious.length) {
+                    rows.push({ id: '__uncategorized', name: 'Sin categoría', icon: '🏷️', color: '#8E8E93', txs: orphanTxs,
+                        spent: sumOf(orphanTxs), previousSpent: sumOf(orphanPrevious), budget: 0 });
+                }
+                rows.sort((a, b) => b.spent - a.spent || a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+                this.categoryExpenseRows = rows;
 
-                empty.classList.toggle('hidden', rows.length > 0);
-                rows.forEach(({ category, spent, previousSpent }) => {
-                    const share = totalMonthlyExpenses > 0 ? (spent / totalMonthlyExpenses) * 100 : 0;
-                    const difference = spent - previousSpent;
-                    let comparisonText = 'Sin cambios';
-                    let comparisonClass = 'text-gray-400';
-                    if (previousSpent === 0 && spent > 0) {
-                        comparisonText = `Nuevo gasto (+${this.formatCurrency(spent)})`;
-                        comparisonClass = 'text-apple-red';
-                    } else if (previousSpent > 0) {
-                        const changePct = (difference / previousSpent) * 100;
-                        comparisonText = `${difference > 0 ? '+' : difference < 0 ? '−' : ''}${this.formatCurrency(Math.abs(difference))} (${changePct > 0 ? '+' : ''}${changePct.toFixed(1)}%)`;
-                        comparisonClass = difference > 0 ? 'text-apple-red' : difference < 0 ? 'text-apple-green' : 'text-gray-400';
+                // Comparativa con flecha y texto (no depende solo del color).
+                const compare = (spent, previous) => {
+                    if (spent === 0 && previous === 0) return { text: '—', tone: 'text-gray-500' };
+                    if (previous === 0) return { text: `↑ Nuevo gasto (+${fmt(spent)})`, tone: 'text-apple-red' };
+                    const diff = spent - previous;
+                    if (diff === 0) return { text: '= Sin cambios', tone: 'text-gray-400' };
+                    const pct = (diff / previous) * 100;
+                    return {
+                        text: `${diff > 0 ? '↑ +' : '↓ −'}${fmt(Math.abs(diff))} (${pct > 0 ? '+' : ''}${pct.toFixed(1)}%)`,
+                        tone: diff > 0 ? 'text-apple-red' : 'text-apple-green'
+                    };
+                };
+                // Mismo semáforo que las tarjetas de Categorías: 80% y 100%.
+                const budgetState = (spent, budget) => {
+                    const pct = (spent / budget) * 100;
+                    if (pct > 100) return { label: 'Excedido', tone: 'bg-apple-red/20 text-apple-red', pct };
+                    if (pct >= 80) return { label: 'Cerca del límite', tone: 'bg-apple-orange/20 text-apple-orange', pct };
+                    return { label: 'En rango', tone: 'bg-apple-green/20 text-apple-green', pct };
+                };
+
+                // ----- Resumen superior -----
+                const totalCompare = totalPrevious > 0 ? this.percentChange(totalSpent, totalPrevious) : null;
+                setText('ce-total-amount', totalSpent > 0 ? fmt(totalSpent) : '—');
+                if (totalSpent === 0 && totalPrevious === 0) {
+                    setText('ce-total-note', 'Sin gastos en este mes ni en el anterior.');
+                    setTone('ce-total-note', 'text-gray-400');
+                } else if (totalCompare === null) {
+                    setText('ce-total-note', `Sin gastos en ${previousLabel} para comparar.`);
+                    setTone('ce-total-note', 'text-gray-400');
+                } else {
+                    const arrow = totalSpent > totalPrevious ? '↑' : totalSpent < totalPrevious ? '↓' : '=';
+                    setText('ce-total-note', `${arrow} ${totalCompare >= 0 ? '+' : ''}${totalCompare.toFixed(1)}% frente a ${previousLabel}`);
+                    setTone('ce-total-note', totalSpent > totalPrevious ? 'text-apple-red' : totalSpent < totalPrevious ? 'text-apple-green' : 'text-gray-400');
+                }
+                const withSpend = rows.filter(row => row.spent > 0);
+                const top = withSpend[0];
+                setText('ce-top-name', top ? `${top.icon} ${top.name}` : '—');
+                setText('ce-top-note', top ? `${((top.spent / totalSpent) * 100).toFixed(1)}% del gasto del mes (${fmt(top.spent)})` : 'Sin gastos en el mes seleccionado.');
+                setText('ce-count', rows.length ? `${withSpend.length} de ${rows.length}` : '—');
+                setText('ce-count-note', 'categorías de gasto con movimientos este mes.');
+
+                // ----- Lo que más subió / bajó -----
+                const highlights = document.getElementById('ce-highlights');
+                if (highlights) {
+                    const describe = (list, sign, tone) => list.map(row =>
+                        `${escapeHTML(row.icon)} ${escapeHTML(row.name)} (<span class="${tone}">${sign}${fmt(Math.abs(row.spent - row.previousSpent))}</span>)`).join(', ');
+                    if (totalSpent === 0 && totalPrevious === 0) {
+                        highlights.textContent = 'Sin gastos registrados en este mes ni en el anterior.';
+                    } else if (totalPrevious === 0) {
+                        highlights.textContent = `Sin gastos en ${previousLabel} para comparar.`;
+                    } else {
+                        const ups = rows.filter(row => row.spent > row.previousSpent)
+                            .sort((a, b) => (b.spent - b.previousSpent) - (a.spent - a.previousSpent)).slice(0, 3);
+                        const downs = rows.filter(row => row.spent < row.previousSpent)
+                            .sort((a, b) => (a.spent - a.previousSpent) - (b.spent - b.previousSpent)).slice(0, 3);
+                        const parts = [];
+                        if (ups.length) parts.push(`<span class="font-semibold text-white"><span class="text-apple-red" aria-hidden="true">↑</span> Lo que más subió:</span> ${describe(ups, '+', 'text-apple-red')}`);
+                        if (downs.length) parts.push(`<span class="font-semibold text-white"><span class="text-apple-green" aria-hidden="true">↓</span> Lo que más bajó:</span> ${describe(downs, '−', 'text-apple-green')}`);
+                        highlights.innerHTML = parts.length ? parts.join('<span class="mx-2 text-gray-600" aria-hidden="true">·</span>') : `Sin variaciones por categoría frente a ${escapeHTML(previousLabel)}.`;
                     }
+                }
 
+                // ----- Tabla -----
+                tbody.innerHTML = '';
+                tfoot.innerHTML = '';
+                empty.classList.toggle('hidden', rows.length > 0);
+                if (rows.length === 0) return;
+
+                rows.forEach((row, index) => {
+                    const share = totalSpent > 0 ? (row.spent / totalSpent) * 100 : 0;
+                    const comparison = compare(row.spent, row.previousSpent);
+                    const expanded = row.spent > 0 && this.expandedCategoryExpenses.has(row.id);
+                    const label = `<span class="text-base leading-none" aria-hidden="true">${escapeHTML(row.icon)}</span><span class="font-medium">${escapeHTML(row.name)}</span>`;
+                    const nameCell = row.spent > 0
+                        ? `<button type="button" data-ce-toggle="${index}" onclick="app.toggleCategoryExpenseDetail(${index})" aria-expanded="${expanded}" ${expanded ? `aria-controls="cat-exp-detail-${index}"` : ''}
+                               aria-label="${escapeHTML(row.name)}: ${expanded ? 'ocultar' : 'ver'} movimientos"
+                               class="flex items-center gap-2.5 w-full text-left rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-apple-blue">
+                               <i class="fa-solid ${expanded ? 'fa-chevron-down' : 'fa-chevron-right'} text-[9px] text-gray-400 w-3 text-center" aria-hidden="true"></i>${label}
+                           </button>`
+                        : `<div class="flex items-center gap-2.5"><span class="w-3" aria-hidden="true"></span>${label}</div>`;
+                    let budgetCell = '<span class="text-gray-500">—</span>';
+                    if (row.budget > 0) {
+                        const state = budgetState(row.spent, row.budget);
+                        budgetCell = `<div class="font-mono text-gray-300 whitespace-nowrap">${fmt(row.budget)}</div>
+                            <span class="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${state.tone}">${state.pct.toFixed(0)}% · ${state.label}</span>`;
+                    }
                     const tr = document.createElement('tr');
-                    tr.className = 'hover:bg-white/5 transition';
+                    tr.className = 'hover:bg-white/5 transition align-top';
                     tr.innerHTML = `
-                        <td class="p-3 text-white font-medium">${escapeHTML(category.name)}</td>
-                        <td class="p-3 text-right font-mono text-apple-red whitespace-nowrap">${this.formatCurrency(spent)}</td>
-                        <td class="p-3 text-right text-gray-300 font-mono whitespace-nowrap">${share.toFixed(1)}%</td>
-                        <td class="p-3 text-right font-mono ${comparisonClass} whitespace-nowrap">${comparisonText}</td>
+                        <td class="p-3">${nameCell}</td>
+                        <td class="p-3 text-right font-mono text-apple-red whitespace-nowrap">${fmt(row.spent)}</td>
+                        <td class="p-3 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                <div class="hidden sm:block w-20 h-1.5 rounded-full bg-white/10 overflow-hidden" aria-hidden="true">
+                                    <div class="h-full rounded-full" style="width: ${Math.min(100, share).toFixed(1)}%; background: ${escapeHTML(row.color)}"></div>
+                                </div>
+                                <span class="font-mono text-gray-300 whitespace-nowrap">${share.toFixed(1)}%</span>
+                            </div>
+                        </td>
+                        <td class="p-3 text-right">${budgetCell}</td>
+                        <td class="p-3 text-right font-mono whitespace-nowrap ${comparison.tone}">${comparison.text}</td>
                     `;
                     tbody.appendChild(tr);
+
+                    if (expanded) {
+                        const recurrenceLabels = { monthly: 'Mensual', annual: 'Anual' };
+                        const sorted = [...row.txs].sort((a, b) => b.date.localeCompare(a.date));
+                        const shown = sorted.slice(0, 10);
+                        const items = shown.map(tx => `
+                            <li class="flex items-center justify-between gap-3">
+                                <span class="min-w-0 truncate text-gray-300"><span class="text-gray-500 mr-2">${escapeHTML(formatDateDisplay(tx.date))}</span>${escapeHTML(tx.concept)}${recurrenceLabels[tx.recurrence] ? `<span class="ml-2 px-1.5 py-0.5 rounded bg-white/10 text-gray-400 text-[10px]">${recurrenceLabels[tx.recurrence]}</span>` : ''}</span>
+                                <span class="font-mono text-apple-red whitespace-nowrap">${fmt(tx.amount)}</span>
+                            </li>`).join('');
+                        const more = sorted.length > shown.length ? `<p class="text-[11px] text-gray-500">y ${sorted.length - shown.length} movimientos más</p>` : '';
+                        const link = row.id !== '__uncategorized'
+                            ? `<button type="button" onclick="app.viewCategoryTransactions(${index})" class="text-xs text-apple-blue hover:underline">Ver en Transacciones →</button>`
+                            : '';
+                        const detail = document.createElement('tr');
+                        detail.innerHTML = `
+                            <td colspan="5" class="p-0">
+                                <div id="cat-exp-detail-${index}" class="px-4 py-3 bg-white/5 space-y-2" role="region" aria-label="Movimientos de ${escapeHTML(row.name)}">
+                                    <ul class="space-y-1.5 text-xs">${items}</ul>
+                                    ${more}
+                                    ${link}
+                                </div>
+                            </td>`;
+                        tbody.appendChild(detail);
+                    }
                 });
+
+                // ----- Fila de total -----
+                const budgeted = rows.filter(row => row.budget > 0);
+                const totalBudget = budgeted.reduce((acc, row) => acc + row.budget, 0);
+                const budgetedSpent = budgeted.reduce((acc, row) => acc + row.spent, 0);
+                let totalBudgetCell = '<span class="text-gray-500">—</span>';
+                if (totalBudget > 0) {
+                    const state = budgetState(budgetedSpent, totalBudget);
+                    totalBudgetCell = `<div class="font-mono text-gray-300 whitespace-nowrap">${fmt(totalBudget)}</div>
+                        <span class="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${state.tone}">${state.pct.toFixed(0)}% · ${state.label}</span>`;
+                }
+                const totalComparison = compare(totalSpent, totalPrevious);
+                const totalRow = document.createElement('tr');
+                totalRow.className = 'bg-white/5 align-top';
+                totalRow.innerHTML = `
+                    <td class="p-3 font-semibold text-white"><span class="inline-block w-3 mr-2.5" aria-hidden="true"></span>Total</td>
+                    <td class="p-3 text-right font-mono font-semibold text-apple-red whitespace-nowrap">${fmt(totalSpent)}</td>
+                    <td class="p-3 text-right font-mono text-gray-300 whitespace-nowrap">${totalSpent > 0 ? '100.0%' : '—'}</td>
+                    <td class="p-3 text-right">${totalBudgetCell}</td>
+                    <td class="p-3 text-right font-mono font-semibold whitespace-nowrap ${totalComparison.tone}">${totalComparison.text}</td>
+                `;
+                tfoot.appendChild(totalRow);
+            }
+
+            toggleCategoryExpenseDetail(index) {
+                const row = (this.categoryExpenseRows || [])[index];
+                if (!row) return;
+                if (!this.expandedCategoryExpenses) this.expandedCategoryExpenses = new Set();
+                if (this.expandedCategoryExpenses.has(row.id)) this.expandedCategoryExpenses.delete(row.id);
+                else this.expandedCategoryExpenses.add(row.id);
+                this.renderCategoryExpensesTab();
+                const button = document.querySelector(`[data-ce-toggle="${index}"]`);
+                if (button) button.focus();
+            }
+
+            // Abre Transacciones filtrada por el mes seleccionado, solo gastos y la categoría elegida.
+            viewCategoryTransactions(index) {
+                const row = (this.categoryExpenseRows || [])[index];
+                if (!row || row.id === '__uncategorized') return;
+                this.switchTab('transactions');
+                const search = document.getElementById('tx-search-input');
+                const period = document.getElementById('tx-filter-period');
+                const type = document.getElementById('tx-filter-type');
+                const category = document.getElementById('tx-filter-category');
+                if (search) search.value = '';
+                if (type) type.value = 'expense';
+                if (category) category.value = row.id;
+                if (period) {
+                    const target = `month:${this.selectedMonth}`;
+                    period.value = [...period.options].some(option => option.value === target) ? target : 'all';
+                }
+                this.renderTransactionsTable();
             }
 
             openCategoryModal(editingCat = null) {
