@@ -365,7 +365,7 @@
             min-height: 0;
             overflow: hidden;
         }
-        #main-viewport.transactions-fixed-layout #tab-transactions {
+        #main-viewport.transactions-fixed-layout #tab-transactions:not(.hidden) {
             display: flex;
             flex: 1 1 auto;
             flex-direction: column;
@@ -443,6 +443,88 @@
            en el espacio entre ambos y lo teñía de un color distinto al fondo. */
         #tab-transactions .glass-panel,
         html:not(.dark) #tab-transactions .glass-panel {
+            box-shadow: none !important;
+        }
+
+        /* Resumen mensual: misma estructura que Transacciones (cabecera fija y filas con scroll) */
+        #main-viewport.transactions-fixed-layout #tab-monthly-summary:not(.hidden) {
+            display: flex;
+            flex: 1 1 auto;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+        #tab-monthly-summary .transactions-table-panel {
+            display: flex;
+            flex: 1 1 auto;
+            flex-direction: column;
+            min-height: 0;
+        }
+        #tab-monthly-summary .transactions-table-scroll {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            overscroll-behavior: contain;
+            scrollbar-gutter: stable;
+        }
+        #tab-monthly-summary .transactions-table-scroll thead {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: var(--transactions-head-bg, #2c2c2e);
+        }
+        /* Tabla de transacciones: cabecera gris opaca y bordes alineados con el panel.
+           El panel (.transactions-table-panel) ya recorta las esquinas con overflow:hidden,
+           así que la cabecera no define radios propios. La barra de desplazamiento vertical
+           se oculta (el scroll sigue funcionando) para que la cabecera llegue exactamente
+           hasta el borde derecho del contenedor en lugar de dejar un hueco. */
+        #tab-monthly-summary .transactions-table-scroll {
+            --transactions-table-bg: #1c1c1e;
+            --transactions-head-bg: #2c2c2e;
+            --transactions-head-line: rgba(255, 255, 255, .12);
+            scrollbar-gutter: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            background: var(--transactions-table-bg);
+        }
+        #tab-monthly-summary .transactions-table-scroll::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
+        }
+        #tab-monthly-summary .transactions-table-scroll table {
+            width: 100%;
+            min-width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        #tab-monthly-summary .transactions-table-scroll thead,
+        #tab-monthly-summary .transactions-table-scroll thead tr,
+        #tab-monthly-summary .transactions-table-scroll thead th {
+            background-color: var(--transactions-head-bg) !important;
+            background-image: none !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            border-radius: 0 !important;
+        }
+        #tab-monthly-summary .transactions-table-scroll thead th {
+            border-bottom: 1px solid var(--transactions-head-line);
+            color: #d1d1d6;
+        }
+        html:not(.dark) #tab-monthly-summary .transactions-table-scroll {
+            --transactions-table-bg: #ffffff;
+            --transactions-head-bg: #ececf0;
+            --transactions-head-line: rgba(0, 0, 0, .1);
+            background: var(--transactions-table-bg);
+        }
+        html:not(.dark) #tab-monthly-summary .transactions-table-scroll thead th {
+            color: #48484a !important;
+        }
+
+        /* Sin sombras en los paneles de Transacciones: la sombra de cada panel se superponía
+           en el espacio entre ambos y lo teñía de un color distinto al fondo. */
+        #tab-monthly-summary .glass-panel,
+        html:not(.dark) #tab-monthly-summary .glass-panel {
             box-shadow: none !important;
         }
 
@@ -690,6 +772,9 @@
                             <button onclick="app.switchTab('analysis')" id="nav-analysis" class="nav-btn nav-sub-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-300 hover:bg-white/10 hover:text-white transition">
                                 <i class="fa-solid fa-chart-line w-4 text-center text-apple-purple"></i><span>Análisis y comparativas</span>
                             </button>
+                            <button onclick="app.switchTab('monthly-summary')" id="nav-monthly-summary" class="nav-btn nav-sub-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-300 hover:bg-white/10 hover:text-white transition">
+                                <i class="fa-solid fa-calendar-days w-4 text-center text-apple-orange"></i><span>Resumen mensual</span>
+                            </button>
                             <button onclick="app.switchTab('category-expenses')" id="nav-category-expenses" class="nav-btn nav-sub-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-300 hover:bg-white/10 hover:text-white transition">
                                 <i class="fa-solid fa-table-list w-4 text-center text-apple-blue"></i><span>Ver gastos por categoría</span>
                             </button>
@@ -918,6 +1003,10 @@
 
                 <!-- ================= TAB 2: TRANSACTIONS ================= -->
                 <div id="tab-transactions" class="tab-content space-y-4 hidden">
+                    <div>
+                        <h3 class="text-base font-bold text-white">Transacciones</h3>
+                        <p class="text-xs text-gray-400">Consulta, añade o edita las transacciones realizadas en el periodo seleccionado.</p>
+                    </div>
                     <!-- Filters & Search Toolbar -->
                     <div class="glass-panel p-4 rounded-2xl border border-white/10 flex flex-wrap gap-3 items-center justify-between">
                         <div class="flex flex-wrap items-center gap-3 flex-1">
@@ -1040,6 +1129,7 @@
                                         <th class="p-3 text-right">Gasto del mes</th>
                                         <th class="p-3 text-right">% del gasto mensual</th>
                                         <th class="p-3 text-right">Presupuesto</th>
+                                        <th class="p-3 text-right">Estado</th>
                                         <th class="p-3 text-right">Comparativa con el mes anterior</th>
                                     </tr>
                                 </thead>
@@ -1053,23 +1143,30 @@
                     </div>
                 </div>
 
-                <!-- ================= TAB 4: MONTHLY ANALYSIS & COMPARISONS ================= -->
-                <div id="tab-analysis" class="tab-content space-y-6 hidden">
-                    <!-- Monthly financial summary -->
+                <!-- ================= TAB: RESUMEN MENSUAL ================= -->
+                <div id="tab-monthly-summary" class="tab-content space-y-6 hidden">
                     <div class="glass-panel p-5 rounded-2xl border border-white/10 space-y-3">
-                        <div>
-                            <h3 class="text-sm font-semibold text-white">Resumen mensual</h3>
-                            <p class="text-xs text-gray-400">Ingresos, gastos, balance mensual y balance acumulado hasta cada mes.</p>
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-semibold text-white">Resumen mensual</h3>
+                                <p class="text-xs text-gray-400" id="ms-range-note">Ingresos, gastos, balance mensual y balance acumulado hasta cada mes.</p>
+                            </div>
+                            <div id="ms-range-group" role="group" aria-label="Periodo del resumen mensual" class="inline-flex rounded-xl bg-white/5 border border-white/10 p-0.5 text-xs">
+                                <button type="button" data-range="6" aria-pressed="false" onclick="app.setMonthlySummaryRange(6)" class="px-3 py-1.5 rounded-lg font-medium transition">6 meses</button>
+                                <button type="button" data-range="12" aria-pressed="true" onclick="app.setMonthlySummaryRange(12)" class="px-3 py-1.5 rounded-lg font-medium transition">12 meses</button>
+                                <button type="button" data-range="0" aria-pressed="false" onclick="app.setMonthlySummaryRange(0)" class="px-3 py-1.5 rounded-lg font-medium transition">Todo</button>
+                            </div>
                         </div>
+                        
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-xs">
                                 <thead class="bg-white/5 text-gray-400 uppercase text-[10px]">
                                     <tr>
-                                        <th class="p-3">Mes y año</th>
-                                        <th class="p-3 text-right">Ingresos totales</th>
-                                        <th class="p-3 text-right">Gastos totales</th>
-                                        <th class="p-3 text-right">Balance del mes</th>
-                                        <th class="p-3 text-right">Balance acumulado</th>
+                                        <th class="p-3.5">Mes y año</th>
+                                        <th class="p-3.5 text-right">Ingresos totales</th>
+                                        <th class="p-3.5 text-right">Gastos totales</th>
+                                        <th class="p-3.5 text-right">Balance del mes</th>
+                                        <th class="p-3.5 text-right">Balance acumulado</th>
                                     </tr>
                                 </thead>
                                 <tbody id="analysis-monthly-summary-tbody" class="divide-y divide-white/5"></tbody>
@@ -1079,7 +1176,10 @@
                             Todavía no hay transacciones para mostrar en el resumen mensual.
                         </div>
                     </div>
+                </div>
 
+                <!-- ================= TAB 4: MONTHLY ANALYSIS & COMPARISONS ================= -->
+                <div id="tab-analysis" class="tab-content space-y-6 hidden">
                     <!-- Comparative Header Info -->
                     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                         <div class="glass-panel p-4 rounded-2xl border border-white/10">
@@ -2082,7 +2182,7 @@
                 this.activeTab = tabName;
                 this.updateHeaderControlsVisibility();
                 const mainViewport = document.getElementById('main-viewport');
-                if (mainViewport) mainViewport.classList.toggle('transactions-fixed-layout', tabName === 'transactions');
+                if (mainViewport) mainViewport.classList.toggle('transactions-fixed-layout', tabName === 'transactions' || tabName === 'monthly-summary');
                 document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
                 document.querySelectorAll('.nav-btn').forEach(el => {
                     el.classList.remove('bg-white/15', 'text-white', 'shadow-md');
@@ -2094,7 +2194,7 @@
                 const navBtn = document.getElementById(`nav-${tabName}`);
                 if (navBtn) navBtn.classList.add('bg-white/15', 'text-white', 'shadow-md');
 
-                const parentGroup = ({ transactions: 'management', categories: 'management', analysis: 'analysis', 'category-expenses': 'analysis', insights: 'analysis', settings: 'system' })[tabName];
+                const parentGroup = ({ transactions: 'management', categories: 'management', analysis: 'analysis', 'monthly-summary': 'analysis', 'category-expenses': 'analysis', insights: 'analysis', settings: 'system' })[tabName];
                 // Al abrir una sección de un grupo se despliega ese grupo y se pliegan los demás.
                 // El Panel Principal no pertenece a ningún grupo: no modifica el estado de los desplegables.
                 if (parentGroup) {
@@ -2117,6 +2217,7 @@
                     dashboard: 'Panel Principal',
                     transactions: 'Gestión de Transacciones',
                     categories: 'Categorías y Presupuestos',
+                    'monthly-summary': 'Resumen Mensual',
                     'category-expenses': 'Gastos por Categoría',
                     analysis: 'Análisis Mensual y Comparativas',
                     insights: 'Asistente Financiero Inteligente',
@@ -2222,6 +2323,7 @@
                 else if (this.activeTab === 'transactions') this.renderTransactionsTable();
                 else if (this.activeTab === 'categories') this.renderCategoriesGrid();
                 else if (this.activeTab === 'category-expenses') this.renderCategoryExpensesTab();
+                else if (this.activeTab === 'monthly-summary') this.renderMonthlySummaryTab();
                 else if (this.activeTab === 'analysis') this.renderAnalysisTab();
                 else if (this.activeTab === 'insights') this.renderInsightsTab();
             }
@@ -3172,7 +3274,7 @@
                     const share = totalSpent > 0 ? (row.spent / totalSpent) * 100 : 0;
                     const comparison = compare(row.spent, row.previousSpent);
                     const expanded = row.spent > 0 && this.expandedCategoryExpenses.has(row.id);
-                    const label = `<span class="text-base leading-none" aria-hidden="true">${escapeHTML(row.icon)}</span><span class="font-medium">${escapeHTML(row.name)}</span>`;
+                    const label = `<span class="text-base leading-none" aria-hidden="true">${escapeHTML(row.icon)}</span><span class="font-medium text-black">${escapeHTML(row.name)}</span>`;
                     const nameCell = row.spent > 0
                         ? `<button type="button" data-ce-toggle="${index}" onclick="app.toggleCategoryExpenseDetail(${index})" aria-expanded="${expanded}" ${expanded ? `aria-controls="cat-exp-detail-${index}"` : ''}
                                aria-label="${escapeHTML(row.name)}: ${expanded ? 'ocultar' : 'ver'} movimientos"
@@ -3181,10 +3283,16 @@
                            </button>`
                         : `<div class="flex items-center gap-2.5"><span class="w-3" aria-hidden="true"></span>${label}</div>`;
                     let budgetCell = '<span class="text-gray-500">—</span>';
+                    let stateCell = '<span class="text-gray-500">—</span>';
                     if (row.budget > 0) {
                         const state = budgetState(row.spent, row.budget);
-                        budgetCell = `<div class="font-mono text-gray-300 whitespace-nowrap">${fmt(row.budget)}</div>
-                            <span class="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${state.tone}">${state.pct.toFixed(0)}% · ${state.label}</span>`;
+                        budgetCell = `<div class="flex items-center justify-end gap-2 whitespace-nowrap">
+                            <span class="font-mono text-gray-300">${fmt(row.budget)}</span>
+                            
+                        </div>`;
+                        stateCell = `<div class="flex items-center justify-end gap-2 whitespace-nowrap">
+                            <span class="inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${state.tone}">${state.pct.toFixed(0)}% · ${state.label}</span>
+                        </div>`;
                     }
                     const tr = document.createElement('tr');
                     tr.className = 'hover:bg-white/5 transition align-top';
@@ -3200,6 +3308,7 @@
                             </div>
                         </td>
                         <td class="p-3 text-right">${budgetCell}</td>
+                        <td class="p-3 text-right">${stateCell}</td>
                         <td class="p-3 text-right font-mono whitespace-nowrap ${comparison.tone}">${comparison.text}</td>
                     `;
                     tbody.appendChild(tr);
@@ -3219,38 +3328,21 @@
                             : '';
                         const detail = document.createElement('tr');
                         detail.innerHTML = `
-                            <td colspan="5" class="p-0">
-                                <div id="cat-exp-detail-${index}" class="px-4 py-3 bg-white/5 space-y-2" role="region" aria-label="Movimientos de ${escapeHTML(row.name)}">
+                            <td colspan="2" class="p-3">
+                                <div id="cat-exp-detail-${index}" class="px-4 py-3 bg-white/5 rounded-lg space-y-2 min-w-0" role="region" aria-label="Movimientos de ${escapeHTML(row.name)}">
                                     <ul class="space-y-1.5 text-xs">${items}</ul>
                                     ${more}
                                     ${link}
                                 </div>
-                            </td>`;
+                            </td>
+                            <td class="p-3"></td>
+                            <td class="p-3"></td>
+                            <td class="p-3"></td>`;
                         tbody.appendChild(detail);
                     }
                 });
 
-                // ----- Fila de total -----
-                const budgeted = rows.filter(row => row.budget > 0);
-                const totalBudget = budgeted.reduce((acc, row) => acc + row.budget, 0);
-                const budgetedSpent = budgeted.reduce((acc, row) => acc + row.spent, 0);
-                let totalBudgetCell = '<span class="text-gray-500">—</span>';
-                if (totalBudget > 0) {
-                    const state = budgetState(budgetedSpent, totalBudget);
-                    totalBudgetCell = `<div class="font-mono text-gray-300 whitespace-nowrap">${fmt(totalBudget)}</div>
-                        <span class="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${state.tone}">${state.pct.toFixed(0)}% · ${state.label}</span>`;
-                }
-                const totalComparison = compare(totalSpent, totalPrevious);
-                const totalRow = document.createElement('tr');
-                totalRow.className = 'bg-white/5 align-top';
-                totalRow.innerHTML = `
-                    <td class="p-3 font-semibold text-white"><span class="inline-block w-3 mr-2.5" aria-hidden="true"></span>Total</td>
-                    <td class="p-3 text-right font-mono font-semibold text-apple-red whitespace-nowrap">${fmt(totalSpent)}</td>
-                    <td class="p-3 text-right font-mono text-gray-300 whitespace-nowrap">${totalSpent > 0 ? '100.0%' : '—'}</td>
-                    <td class="p-3 text-right">${totalBudgetCell}</td>
-                    <td class="p-3 text-right font-mono font-semibold whitespace-nowrap ${totalComparison.tone}">${totalComparison.text}</td>
-                `;
-                tfoot.appendChild(totalRow);
+                // No se muestra una fila de total: los indicadores superiores ya resumen el gasto mensual.
             }
 
             toggleCategoryExpenseDetail(index) {
@@ -3412,6 +3504,29 @@
                 await this.saveData();
             }
 
+            setMonthlySummaryRange(range) {
+                this.monthlySummaryRange = range;
+                this.renderMonthlySummaryTab();
+                const scroller = document.querySelector('#tab-monthly-summary .transactions-table-scroll');
+                if (scroller) scroller.scrollTop = 0;
+            }
+
+            updateMonthlySummaryRangeButtons() {
+                const current = this.monthlySummaryRange ?? 12;
+                document.querySelectorAll('#ms-range-group button').forEach(button => {
+                    const active = Number(button.dataset.range) === current;
+                    button.setAttribute('aria-pressed', String(active));
+                    button.classList.toggle('bg-apple-blue', active);
+                    button.classList.toggle('text-white', active);
+                    button.classList.toggle('text-gray-400', !active);
+                });
+            }
+
+            renderMonthlySummaryTab() {
+                this.updateMonthlySummaryRangeButtons();
+                this.renderMonthlySummary();
+            }
+
             renderMonthlySummary() {
                 const tbody = document.getElementById('analysis-monthly-summary-tbody');
                 const emptyState = document.getElementById('analysis-monthly-summary-empty');
@@ -3470,7 +3585,19 @@
                     };
                 }).reverse();
 
-                rows.forEach(row => {
+                // Periodo mostrado: últimos 6 o 12 meses, o todo el histórico. El balance acumulado
+                // siempre se calcula desde el primer mes, aunque solo se muestren los últimos.
+                const rangeSetting = this.monthlySummaryRange ?? 12;
+                const visibleRows = rangeSetting > 0 ? rows.slice(0, rangeSetting) : rows;
+                const rangeNote = document.getElementById('ms-range-note');
+                if (rangeNote) {
+                    const baseText = 'Ingresos, gastos, balance mensual y balance acumulado hasta cada mes.';
+                    rangeNote.textContent = visibleRows.length < rows.length
+                        ? `${baseText} Mostrando ${visibleRows.length} de ${rows.length} meses.`
+                        : `${baseText} Mostrando ${rows.length} ${rows.length === 1 ? 'mes' : 'meses'}.`;
+                }
+
+                visibleRows.forEach(row => {
                     const tr = document.createElement('tr');
                     tr.className = 'hover:bg-white/5 transition';
                     const monthlyClass = row.monthlyBalance > 0 ? 'text-apple-green' : row.monthlyBalance < 0 ? 'text-apple-red' : 'text-gray-300';
@@ -3487,7 +3614,6 @@
             }
 
             renderAnalysisTab() {
-                this.renderMonthlySummary();
                 const [y, m] = this.selectedMonth.split('-').map(Number);
 
                 // MoM
