@@ -2393,6 +2393,18 @@
                 return this.db.transactions.filter(t => typeof t.date === 'string' && t.date.startsWith(monthStr));
             }
 
+            // Orden de los movimientos en las tablas: fecha descendente y, dentro del mismo día, orden de
+            // inserción inverso (el último movimiento registrado aparece arriba). Editar un movimiento no
+            // cambia su posición, porque se sustituye en su sitio.
+            getNewestFirstComparator() {
+                const insertionOrder = new Map(this.db.transactions.map((tx, index) => [tx.id, index]));
+                return (a, b) => {
+                    const dateDifference = String(b.date).slice(0, 10).localeCompare(String(a.date).slice(0, 10));
+                    if (dateDifference !== 0) return dateDifference;
+                    return (insertionOrder.get(b.id) ?? -1) - (insertionOrder.get(a.id) ?? -1);
+                };
+            }
+
             // ---------- Helpers de fechas y variaciones ----------
             monthLabelLong(monthKey) {
                 const names = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -2649,7 +2661,7 @@
                 this.renderCategoryDonutChart(currentTxs);
 
                 // Render Recent Txs
-                const recentTxs = [...currentTxs].sort((a,b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
+                const recentTxs = [...currentTxs].sort(this.getNewestFirstComparator()).slice(0, 5);
                 const tbody = document.getElementById('dashboard-recent-tx-tbody');
                 tbody.innerHTML = '';
 
@@ -2898,14 +2910,8 @@
                     txs = txs.filter(t => t.category === catFilter);
                 }
 
-                // Ordenar por fecha descendente y, para transacciones del mismo día,
-                // conservar el orden original de incorporación (la primera añadida aparece antes).
-                const insertionOrder = new Map(this.db.transactions.map((tx, index) => [tx.id, index]));
-                txs.sort((a, b) => {
-                    const dateDifference = b.date.localeCompare(a.date);
-                    if (dateDifference !== 0) return dateDifference;
-                    return insertionOrder.get(a.id) - insertionOrder.get(b.id);
-                });
+                // Fecha descendente y, para movimientos del mismo día, el último registrado arriba.
+                txs.sort(this.getNewestFirstComparator());
 
                 const tbody = document.getElementById('transactions-full-tbody');
                 const emptyState = document.getElementById('tx-empty-state');
@@ -3371,7 +3377,7 @@
 
                     if (expanded) {
                         const recurrenceLabels = { monthly: 'Mensual', annual: 'Anual' };
-                        const sorted = [...row.txs].sort((a, b) => b.date.localeCompare(a.date));
+                        const sorted = [...row.txs].sort(this.getNewestFirstComparator());
                         const shown = sorted.slice(0, 10);
                         const items = shown.map(tx => `
                             <li class="flex items-center justify-between gap-3">
@@ -3828,9 +3834,10 @@
                 const empty = document.getElementById('analysis-top-expenses-empty');
                 if (!tbody || !empty) return;
                 tbody.innerHTML = '';
+                const newestFirst = this.getNewestFirstComparator();
                 const top = currentTxs
                     .filter(t => t.type === 'expense')
-                    .sort((a, b) => Number(b.amount) - Number(a.amount))
+                    .sort((a, b) => Number(b.amount) - Number(a.amount) || newestFirst(a, b))
                     .slice(0, 5);
                 empty.classList.toggle('hidden', top.length > 0);
                 const recurrenceLabels = { monthly: 'Mensual', annual: 'Anual' };
