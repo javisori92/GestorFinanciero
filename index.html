@@ -815,6 +815,9 @@
                             <button onclick="app.switchTab('categories')" id="nav-categories" class="nav-btn nav-sub-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-300 hover:bg-white/10 hover:text-white transition">
                                 <i class="fa-solid fa-tags w-4 text-center text-apple-orange"></i><span>Categorías y presupuesto</span>
                             </button>
+                            <button onclick="app.switchTab('loans')" id="nav-loans" class="nav-btn nav-sub-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-300 hover:bg-white/10 hover:text-white transition">
+                                <i class="fa-solid fa-landmark w-4 text-center text-apple-purple"></i><span>Préstamos y financiación</span>
+                            </button>
                         </div>
                     </div>
 
@@ -1145,6 +1148,51 @@
                     </div>
                 </div>
 
+                <!-- ================= TAB: PRÉSTAMOS Y FINANCIACIÓN ================= -->
+                <div id="tab-loans" class="tab-content space-y-6 hidden">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-semibold text-white">Préstamos y financiación</h3>
+                            <p class="text-xs text-gray-400">Registra un préstamo una sola vez: sus cuotas se añaden solas como gasto en cada mes y cuentan en tendencias, gastos fijos y recomendaciones.</p>
+                        </div>
+                        <button type="button" onclick="app.openLoanModal()" class="px-4 py-2 rounded-xl bg-apple-blue hover:bg-blue-600 text-white text-xs font-medium transition flex items-center gap-2">
+                            <i class="fa-solid fa-plus" aria-hidden="true"></i> Nuevo préstamo
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                        <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                            <div class="text-xs text-gray-400 mb-1">Cuotas del mes</div>
+                            <div class="text-xl font-bold text-white" id="loans-month-total">—</div>
+                            <div class="text-xs text-gray-400 mt-1" id="loans-month-note"></div>
+                        </div>
+                        <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                            <div class="text-xs text-gray-400 mb-1">Pendiente de pagar</div>
+                            <div class="text-xl font-bold text-white" id="loans-remaining">—</div>
+                            <div class="text-xs text-gray-400 mt-1" id="loans-remaining-note"></div>
+                        </div>
+                        <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                            <div class="text-xs text-gray-400 mb-1">Próxima cuota</div>
+                            <div class="text-xl font-bold text-white" id="loans-next">—</div>
+                            <div class="text-xs text-gray-400 mt-1" id="loans-next-note"></div>
+                        </div>
+                        <div class="glass-panel p-4 rounded-2xl border border-white/10">
+                            <div class="text-xs text-gray-400 mb-1">Peso sobre tus ingresos</div>
+                            <div class="text-xl font-bold text-white" id="loans-ratio">—</div>
+                            <div class="text-xs text-gray-400 mt-1" id="loans-ratio-note"></div>
+                        </div>
+                    </div>
+
+                    <div id="loans-list" class="grid grid-cols-1 xl:grid-cols-2 gap-4"></div>
+
+                    <div id="loans-empty" class="hidden glass-panel p-8 rounded-2xl border border-white/10 text-center space-y-3">
+                        <div class="text-3xl" aria-hidden="true">🏦</div>
+                        <h4 class="text-sm font-semibold text-white">Todavía no has registrado ningún préstamo</h4>
+                        <p class="text-xs text-gray-400 max-w-md mx-auto">Añade un préstamo, hipoteca o compra financiada con su fecha de inicio, cuota y número de cuotas. Las cuotas se incluirán automáticamente en cada mes.</p>
+                        <button type="button" onclick="app.openLoanModal()" class="px-4 py-2 rounded-xl bg-apple-blue hover:bg-blue-600 text-white text-xs font-medium transition">Añadir mi primer préstamo</button>
+                    </div>
+                </div>
+
                 <!-- ================= TAB: GASTOS POR CATEGORÍA ================= -->
                 <div id="tab-category-expenses" class="tab-content space-y-6 hidden">
                     <!-- Resumen del mes -->
@@ -1434,7 +1482,7 @@
                             </div>
                             <div>
                                 <h3 class="text-sm font-semibold text-white">Pagos y cobros recurrentes</h3>
-                                <p class="text-xs text-gray-400">Suma todos los ingresos y gastos marcados como mensuales o anuales (los anuales se prorratean por mes). Si repites el mismo concepto cada mes, cuenta solo el último mes registrado.</p>
+                                <p class="text-xs text-gray-400">Suma todos los ingresos y gastos marcados como mensuales o anuales (los anuales se prorratean por mes). Si repites el mismo concepto cada mes, cuenta solo el último mes registrado. Las cuotas de préstamos cuentan como gasto fijo y se registran solas.</p>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1635,6 +1683,7 @@
                 this.db = {
                     transactions: [],
                     categories: [],
+                    loans: [],
                     settings: {
                         currency: '€'
                     }
@@ -1791,9 +1840,19 @@
                         notes: String(source.notes ?? '').slice(0, 1000)
                     };
                 });
+                const usedLoanIds = new Set();
+                const loans = (Array.isArray(raw.loans) ? raw.loans : []).map((source, index) => {
+                    let clean;
+                    try { clean = this.sanitizeLoanRecord(source); }
+                    catch (error) { throw new Error(`El préstamo ${index + 1}: ${error.message}`); }
+                    let id = validId(clean.id) && !usedLoanIds.has(clean.id) ? clean.id : `loan_import_${index + 1}`;
+                    while (usedLoanIds.has(id)) id = `loan_import_${index + 1}_${usedLoanIds.size}`;
+                    usedLoanIds.add(id);
+                    return { ...clean, id, category: categoryIdMap.get(clean.category) || '' };
+                });
                 const selectedMonth = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(raw.selectedMonth ?? ''))
                     ? raw.selectedMonth : this.monthKeyFromDate(new Date());
-                return { transactions, categories: categories.length ? categories : this.getEmptyDefaultDB().categories, settings: { currency: '€' }, selectedMonth };
+                return { transactions, categories: categories.length ? categories : this.getEmptyDefaultDB().categories, loans, settings: { currency: '€' }, selectedMonth };
             }
 
             // Toast Notifications
@@ -2116,8 +2175,10 @@
                         { id: 'cat_alimentacion', name: 'Supermercado y Comida', type: 'expense', icon: '🛒', color: '#FF9F0A', budget: 450, group: 'needs' },
                         { id: 'cat_ocio', name: 'Ocio y Restaurantes', type: 'expense', icon: '🍿', color: '#BF5AF2', budget: 250, group: 'wants' },
                         { id: 'cat_suscripciones', name: 'Servicios y Subscripciones', type: 'expense', icon: '📱', color: '#FF453A', budget: 80, group: 'wants' },
-                        { id: 'cat_inversion', name: 'Inversión y Ahorro', type: 'expense', icon: '📈', color: '#30D158', budget: 500, group: 'savings' }
+                        { id: 'cat_inversion', name: 'Inversión y Ahorro', type: 'expense', icon: '📈', color: '#30D158', budget: 500, group: 'savings' },
+                        { id: 'cat_prestamos', name: 'Préstamos y Financiación', type: 'expense', icon: '🏦', color: '#64D2FF', budget: 0, group: 'needs' }
                     ],
+                    loans: [],
                     settings: { currency: '€' }
                 };
             }
@@ -2217,6 +2278,15 @@
                     });
                 });
 
+                // Préstamo de ejemplo: sus cuotas se añaden solas como gasto en cada mes.
+                const demoLoanStart = this.localDateInputValue(new Date(y, m - 14, 5));
+                db.loans = [{
+                    id: 'loan_demo_coche', name: 'Préstamo coche', lender: 'Banco Demo', type: 'car', category: 'cat_prestamos',
+                    startDate: demoLoanStart, firstPaymentDate: demoLoanStart, frequency: 1, installments: 48,
+                    installmentAmount: 245, lastInstallmentAmount: 0, extraPerInstallment: 0, principal: 10500, totalAmount: 11760,
+                    interestRate: 6.5, apr: 7.2, openingFee: 0, includePast: true, cancelledOn: '', notes: 'Préstamo de ejemplo'
+                }];
+
                 return db;
             }
 
@@ -2250,7 +2320,7 @@
                 const navBtn = document.getElementById(`nav-${tabName}`);
                 if (navBtn) navBtn.classList.add('bg-white/15', 'text-white', 'shadow-md');
 
-                const parentGroup = ({ transactions: 'management', categories: 'management', analysis: 'analysis', 'monthly-summary': 'analysis', 'category-expenses': 'analysis', insights: 'analysis', settings: 'system' })[tabName];
+                const parentGroup = ({ transactions: 'management', categories: 'management', loans: 'management', analysis: 'analysis', 'monthly-summary': 'analysis', 'category-expenses': 'analysis', insights: 'analysis', settings: 'system' })[tabName];
                 // Al abrir una sección de un grupo se despliega ese grupo y se pliegan los demás.
                 // El Panel Principal no pertenece a ningún grupo: no modifica el estado de los desplegables.
                 if (parentGroup) {
@@ -2274,6 +2344,7 @@
                     transactions: 'Gestión de Transacciones',
                     categories: 'Categorías y Presupuestos',
                     'monthly-summary': 'Resumen Mensual',
+                    loans: 'Préstamos y Financiación',
                     'category-expenses': 'Gastos por Categoría',
                     analysis: 'Análisis Mensual y Comparativas',
                     insights: 'Asistente Financiero Inteligente',
@@ -2378,6 +2449,7 @@
                 if (this.activeTab === 'dashboard') this.renderDashboard();
                 else if (this.activeTab === 'transactions') this.renderTransactionsTable();
                 else if (this.activeTab === 'categories') this.renderCategoriesGrid();
+                else if (this.activeTab === 'loans') this.renderLoansTab();
                 else if (this.activeTab === 'category-expenses') this.renderCategoryExpensesTab();
                 else if (this.activeTab === 'monthly-summary') this.renderMonthlySummaryTab();
                 else if (this.activeTab === 'analysis') this.renderAnalysisTab();
@@ -2390,7 +2462,230 @@
 
             // FILTER HELPER: Get transactions for a given YYYY-MM
             getTransactionsForMonth(monthStr) {
-                return this.db.transactions.filter(t => typeof t.date === 'string' && t.date.startsWith(monthStr));
+                const manual = this.db.transactions.filter(t => typeof t.date === 'string' && t.date.startsWith(monthStr));
+                const loanTxs = this.getLoanTransactions();
+                return loanTxs.length ? manual.concat(loanTxs.filter(t => t.date.startsWith(monthStr))) : manual;
+            }
+
+
+            // ---------- Préstamos y financiación ----------
+            getLoanTypes() {
+                return {
+                    personal: { label: 'Préstamo personal', icon: 'fa-hand-holding-dollar' },
+                    mortgage: { label: 'Hipoteca', icon: 'fa-house' },
+                    car: { label: 'Vehículo', icon: 'fa-car' },
+                    consumer: { label: 'Compra financiada', icon: 'fa-bag-shopping' },
+                    credit_card: { label: 'Tarjeta / crédito', icon: 'fa-credit-card' },
+                    student: { label: 'Estudios', icon: 'fa-graduation-cap' },
+                    other: { label: 'Otro', icon: 'fa-file-invoice-dollar' }
+                };
+            }
+
+            getLoanFrequencies() {
+                return { 1: 'Mensual', 2: 'Bimestral', 3: 'Trimestral', 6: 'Semestral', 12: 'Anual' };
+            }
+
+            // Valida y normaliza un préstamo (formulario y archivo importado). Lanza un Error con el motivo.
+            sanitizeLoanRecord(source) {
+                if (!source || typeof source !== 'object') throw new Error('no es válido.');
+                const amountOf = (value, label, required = false) => {
+                    const number = Number(value === '' || value == null ? 0 : value);
+                    if (!Number.isFinite(number) || number < 0 || number > 1e9) throw new Error(`${label} no es válido.`);
+                    if (required && number <= 0) throw new Error(`${label} debe ser mayor que cero.`);
+                    return Math.round(number * 100) / 100;
+                };
+                const percentOf = (value, label) => {
+                    const number = Number(value === '' || value == null ? 0 : value);
+                    if (!Number.isFinite(number) || number < 0 || number > 100) throw new Error(`${label} debe estar entre 0 y 100.`);
+                    return Math.round(number * 1000) / 1000;
+                };
+                const optionalDate = (value, label) => {
+                    const text = String(value ?? '');
+                    if (!text) return '';
+                    if (!isValidISODate(text)) throw new Error(`${label} no es válida.`);
+                    return text;
+                };
+                const name = String(source.name ?? '').trim().slice(0, 100);
+                if (!name) throw new Error('falta el nombre.');
+                const installments = Math.floor(Number(source.installments));
+                if (!Number.isFinite(installments) || installments < 1 || installments > 600) throw new Error('el número de cuotas debe estar entre 1 y 600.');
+                const firstPaymentDate = String(source.firstPaymentDate ?? '');
+                if (!isValidISODate(firstPaymentDate)) throw new Error('la fecha de la primera cuota no es válida.');
+                const frequency = [1, 2, 3, 6, 12].includes(Number(source.frequency)) ? Number(source.frequency) : 1;
+                return {
+                    id: String(source.id ?? ''),
+                    name,
+                    lender: String(source.lender ?? '').trim().slice(0, 100),
+                    type: this.getLoanTypes()[source.type] ? source.type : 'other',
+                    category: String(source.category ?? ''),
+                    startDate: optionalDate(source.startDate, 'La fecha de inicio'),
+                    firstPaymentDate,
+                    frequency,
+                    installments,
+                    installmentAmount: amountOf(source.installmentAmount, 'El importe de la cuota', true),
+                    lastInstallmentAmount: amountOf(source.lastInstallmentAmount, 'El importe de la última cuota'),
+                    extraPerInstallment: amountOf(source.extraPerInstallment, 'El seguro u otros gastos por cuota'),
+                    principal: amountOf(source.principal, 'El capital solicitado'),
+                    totalAmount: amountOf(source.totalAmount, 'El importe total a devolver'),
+                    interestRate: percentOf(source.interestRate, 'El TIN'),
+                    apr: percentOf(source.apr, 'La TAE'),
+                    openingFee: amountOf(source.openingFee, 'La comisión de apertura'),
+                    includePast: source.includePast !== false,
+                    cancelledOn: optionalDate(source.cancelledOn, 'La fecha de cancelación'),
+                    notes: String(source.notes ?? '').slice(0, 1000)
+                };
+            }
+
+            // Cuota, última cuota e importe total se pueden dar en cualquier combinación: se completa lo que falta.
+            resolveLoanAmounts(installments, amount, total, last) {
+                const round2 = value => Math.round(value * 100) / 100;
+                let installmentAmount = amount;
+                let lastInstallmentAmount = last;
+                let note = '';
+                if (!(installmentAmount > 0) && total > 0 && installments > 0) installmentAmount = round2(total / installments);
+                if (installmentAmount > 0 && total > 0 && installments > 0 && !(lastInstallmentAmount > 0)) {
+                    const adjusted = round2(total - installmentAmount * (installments - 1));
+                    if (adjusted > 0 && Math.abs(adjusted - installmentAmount) > 0.004) {
+                        lastInstallmentAmount = adjusted;
+                        note = `La última cuota se ajusta a ${this.formatCurrency(adjusted)} para que el total coincida.`;
+                    }
+                }
+                return { installmentAmount, lastInstallmentAmount, note };
+            }
+
+            // Calendario de cuotas: fecha e importe de cada una (periodicidad, última cuota distinta y cancelación).
+            getLoanSchedule(loan) {
+                const step = Number(loan.frequency) || 1;
+                const extra = Number(loan.extraPerInstallment) || 0;
+                const schedule = [];
+                for (let number = 1; number <= loan.installments; number++) {
+                    const date = this.localDateInputValue(this.addMonthsClamped(loan.firstPaymentDate, (number - 1) * step));
+                    if (loan.cancelledOn && date > loan.cancelledOn) break;
+                    const isLast = number === loan.installments;
+                    const base = isLast && loan.lastInstallmentAmount > 0 ? loan.lastInstallmentAmount : loan.installmentAmount;
+                    schedule.push({ number, date, amount: Math.round((base + extra) * 100) / 100 });
+                }
+                return schedule;
+            }
+
+            // Movimientos "virtuales": una cuota de gasto por cada fecha del calendario (más la comisión de apertura).
+            // No se guardan como transacciones: salen del préstamo, así que editar o borrar el préstamo los actualiza.
+            getLoanTransactions() {
+                const loans = Array.isArray(this.db.loans) ? this.db.loans : [];
+                const monthKey = this.monthKeyFromDate(new Date());
+                const cache = this._loanTxCache;
+                if (cache && cache.ref === loans && cache.version === (this.loansVersion || 0) && cache.monthKey === monthKey) return cache.list;
+                const monthStart = `${monthKey}-01`;
+                const list = [];
+                loans.forEach(loan => {
+                    this.getLoanSchedule(loan).forEach(item => {
+                        if (!loan.includePast && item.date < monthStart) return;
+                        list.push({
+                            id: `loan_${loan.id}_${item.number}`, loanId: loan.id, installment: item.number,
+                            concept: `${loan.name} · cuota ${item.number}/${loan.installments}`, amount: item.amount,
+                            type: 'expense', category: loan.category, date: item.date, recurrence: 'none', notes: loan.lender || ''
+                        });
+                    });
+                    if (loan.openingFee > 0) {
+                        const feeDate = loan.startDate || loan.firstPaymentDate;
+                        if (loan.includePast || feeDate >= monthStart) {
+                            list.push({
+                                id: `loan_${loan.id}_fee`, loanId: loan.id, installment: 0,
+                                concept: `${loan.name} · comisión de apertura`, amount: loan.openingFee,
+                                type: 'expense', category: loan.category, date: feeDate, recurrence: 'none', notes: loan.lender || ''
+                            });
+                        }
+                    }
+                });
+                this._loanTxCache = { ref: loans, version: this.loansVersion || 0, monthKey, list };
+                return list;
+            }
+
+            getAllTransactions() {
+                const loanTxs = this.getLoanTransactions();
+                return loanTxs.length ? this.db.transactions.concat(loanTxs) : this.db.transactions;
+            }
+
+            // Para saldos: las cuotas futuras todavía no se han pagado, así que no restan del balance.
+            getBalanceTransactions() {
+                const today = this.localDateInputValue();
+                const paidLoanTxs = this.getLoanTransactions().filter(t => t.date <= today);
+                return paidLoanTxs.length ? this.db.transactions.concat(paidLoanTxs) : this.db.transactions;
+            }
+
+            getLoanStats(loan, todayISO = this.localDateInputValue()) {
+                const schedule = this.getLoanSchedule(loan);
+                const paid = schedule.filter(item => item.date <= todayISO);
+                const remaining = schedule.filter(item => item.date > todayISO);
+                const sumOf = list => list.reduce((acc, item) => acc + item.amount, 0);
+                const extra = Number(loan.extraPerInstallment) || 0;
+                const scheduledTotal = sumOf(schedule);
+                let status = 'active';
+                if (schedule.length === 0) status = 'cancelled';
+                else if (schedule[0].date > todayISO) status = 'upcoming';
+                else if (remaining.length === 0) status = schedule.length < loan.installments ? 'cancelled' : 'finished';
+                return {
+                    schedule, paid, remaining, status, scheduledTotal,
+                    paidAmount: sumOf(paid), remainingAmount: sumOf(remaining),
+                    next: remaining[0] || null,
+                    lastDate: schedule.length ? schedule[schedule.length - 1].date : loan.firstPaymentDate,
+                    interest: loan.principal > 0 ? Math.max(0, scheduledTotal - extra * schedule.length - loan.principal) : null,
+                    progress: schedule.length ? paid.length / schedule.length : 0
+                };
+            }
+
+            // Importe total del préstamo: el que escribió el usuario o, si no lo indicó, el que resulta de sumar
+            // todas las cuotas del plan completo (con la última cuota distinta y el seguro/otros gastos por cuota)
+            // más la comisión de apertura. La cancelación anticipada no reduce el total del contrato.
+            getLoanTotal(loan) {
+                const plan = this.getLoanSchedule({ ...loan, cancelledOn: '' });
+                const installmentsTotal = plan.reduce((acc, item) => acc + item.amount, 0);
+                const fee = Number(loan.openingFee) || 0;
+                const extra = Number(loan.extraPerInstallment) || 0;
+                const computed = Math.round((installmentsTotal + fee) * 100) / 100;
+                const declared = Number(loan.totalAmount) || 0;
+                const count = plan.length;
+                const regular = count ? plan[0].amount : 0;
+                const last = count ? plan[count - 1].amount : 0;
+                let description = count > 1 && Math.abs(last - regular) > 0.004
+                    ? `${count - 1} cuotas de ${this.formatCurrency(regular)} + última de ${this.formatCurrency(last)}`
+                    : `${count} ${count === 1 ? 'cuota' : 'cuotas'} de ${this.formatCurrency(regular)}`;
+                if (fee > 0) description += ` + ${this.formatCurrency(fee)} de comisión de apertura`;
+                if (extra > 0) description += ` (cada cuota incluye ${this.formatCurrency(extra)} de seguro u otros gastos)`;
+                return {
+                    total: declared > 0 ? declared : computed,
+                    source: declared > 0 ? 'declared' : 'computed',
+                    computed, declared, description
+                };
+            }
+
+            getLoanInstallmentsTotal(monthKey) {
+                return this.getLoanTransactions()
+                    .filter(t => t.installment > 0 && t.date.startsWith(monthKey))
+                    .reduce((acc, t) => acc + t.amount, 0);
+            }
+
+            // Compromisos de préstamo activos en un mes, con su equivalente mensual (para gastos fijos y proyecciones).
+            getLoanSeries(refDate) {
+                const [refYear, refMonth] = this.monthKeyFromDate(refDate).split('-').map(Number);
+                const refIndex = refYear * 12 + refMonth;
+                const indexOf = isoDate => { const [y, m] = isoDate.slice(0, 7).split('-').map(Number); return y * 12 + m; };
+                const series = [];
+                (this.db.loans || []).forEach(loan => {
+                    const schedule = this.getLoanSchedule(loan);
+                    if (!schedule.length) return;
+                    if (refIndex < indexOf(schedule[0].date) || refIndex > indexOf(schedule[schedule.length - 1].date)) return;
+                    const step = Number(loan.frequency) || 1;
+                    const regular = Math.round((loan.installmentAmount + (Number(loan.extraPerInstallment) || 0)) * 100) / 100;
+                    const reference = schedule.find(item => indexOf(item.date) === refIndex)
+                        || schedule.filter(item => indexOf(item.date) <= refIndex).pop() || schedule[0];
+                    series.push({
+                        key: `loan:${loan.id}`, tx: { id: `loan_${loan.id}`, concept: loan.name, category: loan.category, type: 'expense' },
+                        type: 'expense', recurrence: 'monthly', amount: regular, monthlyAmount: regular / step,
+                        lastDate: reference.date, isLoan: true, loanId: loan.id
+                    });
+                });
+                return series;
             }
 
             // Orden de los movimientos en las tablas: fecha descendente y, dentro del mismo día, orden de
@@ -2429,7 +2724,7 @@
             }
 
             isRecurringTx(tx) {
-                return tx && (tx.recurrence === 'monthly' || tx.recurrence === 'annual');
+                return tx && ((tx.loanId && tx.installment > 0) || tx.recurrence === 'monthly' || tx.recurrence === 'annual');
             }
 
             // ---------- Recurrencia ----------
@@ -2439,7 +2734,7 @@
             // así que dos ingresos mensuales distintos nunca se pisan entre sí.
             // Un compromiso se da por activo mientras su último registro tenga como máximo 12 meses
             // (mensuales) o 24 meses (anuales); pasado ese tiempo se considera cancelado.
-            getRecurringSeries(refDate = new Date(), { includeFuture = false } = {}) {
+            getRecurringSeries(refDate = new Date(), { includeFuture = false, includeLoans = true } = {}) {
                 const refKey = this.monthKeyFromDate(refDate);
                 const [refYear, refMonth] = refKey.split('-').map(Number);
                 const refIndex = refYear * 12 + refMonth;
@@ -2469,6 +2764,7 @@
                         });
                     });
                 });
+                if (includeLoans) series.push(...this.getLoanSeries(refDate));
                 return series;
             }
 
@@ -2488,7 +2784,7 @@
                 const horizonISO = this.localDateInputValue(new Date(today.getFullYear(), today.getMonth(), today.getDate() + horizonDays));
                 const currentIndex = today.getFullYear() * 12 + today.getMonth();
                 const dueItems = [];
-                this.getRecurringSeries(today, { includeFuture: true }).forEach(item => {
+                this.getRecurringSeries(today, { includeFuture: true, includeLoans: false }).forEach(item => {
                     const [lastYear, lastMonth, lastDay] = item.lastDate.split('-').map(Number);
                     const lastIndex = lastYear * 12 + (lastMonth - 1);
                     let due;
@@ -2510,6 +2806,18 @@
                         dueISO = this.localDateInputValue(due);
                         first = false;
                     }
+                });
+                // Cuotas de préstamos previstas en el periodo (ya se registran solas, por eso nunca están "sin registrar").
+                (this.db.loans || []).forEach(loan => {
+                    this.getLoanSchedule(loan).forEach(item => {
+                        if (item.date < todayISO || item.date > horizonISO) return;
+                        dueItems.push({
+                            key: `loan:${loan.id}:${item.number}`,
+                            tx: { id: `loan_${loan.id}_${item.number}`, concept: `${loan.name} · cuota ${item.number}/${loan.installments}`, category: loan.category, type: 'expense' },
+                            type: 'expense', recurrence: 'monthly', amount: item.amount, monthlyAmount: item.amount,
+                            lastDate: item.date, dueISO: item.date, overdue: false, isLoan: true, loanId: loan.id
+                        });
+                    });
                 });
                 return dueItems.sort((a, b) => a.dueISO.localeCompare(b.dueISO) || b.amount - a.amount);
             }
@@ -2559,7 +2867,7 @@
                 const fixedRegistered = sumAmount(expenses.filter(tx => this.isRecurringTx(tx)));
                 const variableSoFar = total - fixedRegistered;
                 const fixedPending = this.getRecurringDue(now)
-                    .filter(item => item.type === 'expense' && item.dueISO.startsWith(monthKey))
+                    .filter(item => item.type === 'expense' && !item.isLoan && item.dueISO.startsWith(monthKey))
                     .reduce((acc, item) => acc + item.amount, 0);
                 const variableForecast = (variableSoFar / elapsed) * daysInMonth;
                 return {
@@ -2593,11 +2901,11 @@
                     row.innerHTML = `
                         <div class="min-w-0">
                             <div class="text-xs font-medium text-white truncate">${escapeHTML(cat.icon)} ${escapeHTML(item.tx.concept)}</div>
-                            <div class="text-[11px] ${item.overdue ? 'text-apple-orange' : 'text-gray-400'}">${item.overdue ? 'Sin registrar · ' : ''}${escapeHTML(formatDateDisplay(item.dueISO))} · ${item.recurrence === 'annual' ? 'Anual' : 'Mensual'}</div>
+                            <div class="text-[11px] ${item.overdue ? 'text-apple-orange' : 'text-gray-400'}">${item.overdue ? 'Sin registrar · ' : ''}${escapeHTML(formatDateDisplay(item.dueISO))} · ${item.isLoan ? 'Préstamo' : item.recurrence === 'annual' ? 'Anual' : 'Mensual'}</div>
                         </div>
                         <div class="flex items-center gap-3 shrink-0">
                             <span class="text-xs font-mono font-semibold ${isIncome ? 'text-apple-green' : 'text-white'}">${isIncome ? '+' : '-'}${this.formatCurrency(item.amount)}</span>
-                            <button type="button" onclick="app.registerRecurringDue(${index})" class="px-2.5 py-1 rounded-lg bg-apple-blue/20 text-apple-blue hover:bg-apple-blue/30 text-[11px] font-medium transition">Registrar</button>
+                            ${item.isLoan ? '<span class="text-[11px] text-gray-500">Automática</span>' : `<button type="button" onclick="app.registerRecurringDue(${index})" class="px-2.5 py-1 rounded-lg bg-apple-blue/20 text-apple-blue hover:bg-apple-blue/30 text-[11px] font-medium transition">Registrar</button>`}
                         </div>
                     `;
                     list.appendChild(row);
@@ -2617,8 +2925,8 @@
                 const currentTxs = this.getTransactionsForMonth(this.selectedMonth);
 
                 // Calculate Net Balance (total of all transactions in database up to now)
-                const totalIncomeAllTime = this.db.transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0);
-                const totalExpenseAllTime = this.db.transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + Number(t.amount), 0);
+                const totalIncomeAllTime = this.getBalanceTransactions().filter(t => t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0);
+                const totalExpenseAllTime = this.getBalanceTransactions().filter(t => t.type === 'expense').reduce((acc, t) => acc + Number(t.amount), 0);
                 const netBalance = totalIncomeAllTime - totalExpenseAllTime;
 
                 // Monthly metrics
@@ -2857,10 +3165,18 @@
                 const typeFilter = document.getElementById('tx-filter-type').value;
                 const catFilter = document.getElementById('tx-filter-category').value;
 
-                // Show only months that actually contain transactions, alongside current/all.
-                const availableMonths = [...new Set(this.db.transactions
+                // Meses con movimientos, junto a "Mes actual" y "Todos". No se ofrecen meses futuros ni
+                // anteriores al primer movimiento propio: las cuotas de préstamos no alargan la lista.
+                const currentMonthKey = this.monthKeyFromDate(new Date());
+                const ownMonthKeys = this.db.transactions
+                    .map(t => String(t.date || '').slice(0, 7))
+                    .filter(key => /^\d{4}-(0[1-9]|1[0-2])$/.test(key))
+                    .sort();
+                const earliestMonth = ownMonthKeys.length && ownMonthKeys[0] <= currentMonthKey ? ownMonthKeys[0] : currentMonthKey;
+                const availableMonths = [...new Set(this.getAllTransactions()
                     .map(t => this.monthKeyFromDate(new Date(`${t.date}T12:00:00`)))
-                    .filter(month => /^\d{4}-(0[1-9]|1[0-2])$/.test(month)))].sort((a, b) => b.localeCompare(a));
+                    .filter(month => /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && month >= earliestMonth && month <= currentMonthKey))]
+                    .sort((a, b) => b.localeCompare(a));
                 const previousPeriod = periodSelect.value || 'current';
                 const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
                 periodSelect.innerHTML = '<option value="current">Mes actual</option><option value="all">Todos los registros</option>';
@@ -2884,7 +3200,7 @@
                         });
                 }
 
-                let txs = [...this.db.transactions];
+                let txs = [...this.getAllTransactions()];
 
                 // Filter by period. Month-specific options are only generated for months with records.
                 if (periodFilter === 'current') {
@@ -2926,7 +3242,7 @@
                 txs.forEach(tx => {
                     const cat = this.db.categories.find(c => c.id === tx.category) || { icon: '🏷️', name: 'Sin categoría' };
                     const recurrenceLabels = { none: 'Única', monthly: 'Mensual', annual: 'Anual' };
-                    const recurrenceLabel = recurrenceLabels[tx.recurrence] || recurrenceLabels.none;
+                    const recurrenceLabel = tx.loanId ? 'Préstamo' : (recurrenceLabels[tx.recurrence] || recurrenceLabels.none);
                     const tr = document.createElement('tr');
                     tr.className = 'hover:bg-white/5 transition border-b border-white/5';
                     tr.innerHTML = `
@@ -2945,12 +3261,16 @@
                             ${tx.type === 'income' ? '+' : '-'}${this.formatCurrency(tx.amount)}
                         </td>
                         <td class="p-3.5 text-center space-x-1">
+                            ${tx.loanId ? `
+                            <button onclick="app.openLoanFromTransaction('${escapeHTML(tx.loanId)}')" title="Cuota generada por un préstamo. Se gestiona desde Préstamos y financiación." aria-label="Ver el préstamo de esta cuota" class="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition">
+                                <i class="fa-solid fa-lock text-xs"></i>
+                            </button>` : `
                             <button onclick="app.editTransactionModal('${tx.id}')" class="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition">
                                 <i class="fa-solid fa-pen text-xs"></i>
                             </button>
                             <button onclick="app.deleteTransaction('${tx.id}')" class="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-apple-red transition">
                                 <i class="fa-solid fa-trash text-xs"></i>
-                            </button>
+                            </button>`}
                         </td>
                     `;
                     tbody.appendChild(tr);
@@ -3153,9 +3473,9 @@
                     return `"${text.replace(/"/g, '""')}"`;
                 };
                 let csv = 'ID,Fecha,Concepto,Importe,Tipo,Categoría,Notas,Recurrencia\n';
-                this.db.transactions.forEach(t => {
+                this.getAllTransactions().forEach(t => {
                     const cat = this.db.categories.find(c => c.id === t.category);
-                    csv += [t.id, t.date, t.concept, t.amount, t.type, cat ? cat.name : '', t.notes || '', ({ none: 'Única', monthly: 'Mensual', annual: 'Anual' })[t.recurrence] || 'Única'].map(csvCell).join(',') + '\n';
+                    csv += [t.id, t.date, t.concept, t.amount, t.type, cat ? cat.name : '', t.notes || '', (t.loanId ? 'Préstamo' : ({ none: 'Única', monthly: 'Mensual', annual: 'Anual' })[t.recurrence]) || 'Única'].map(csvCell).join(',') + '\n';
                 });
                 this.downloadStringAsFile(csv, 'transacciones_finanzas.csv');
                 this.showToast("Exportado en formato CSV", "success");
@@ -3217,6 +3537,389 @@
                     grid.appendChild(card);
                 });
 
+            }
+
+            // ---------- Página y formulario de préstamos ----------
+            renderLoansTab() {
+                const list = document.getElementById('loans-list');
+                const empty = document.getElementById('loans-empty');
+                if (!list || !empty) return;
+                if (!this.expandedLoans) this.expandedLoans = new Set();
+                const fmt = value => this.formatCurrency(value);
+                const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+                const setTone = (id, tone) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.classList.remove('text-white', 'text-apple-green', 'text-apple-orange', 'text-apple-red');
+                    el.classList.add(tone);
+                };
+
+                const loans = this.db.loans || [];
+                const todayISO = this.localDateInputValue();
+                const monthKey = this.monthKeyFromDate(new Date());
+                const entries = loans.map(loan => ({ loan, stats: this.getLoanStats(loan, todayISO) }));
+
+                // ----- Resumen -----
+                const monthTxs = this.getLoanTransactions().filter(t => t.installment > 0 && t.date.startsWith(monthKey));
+                const monthTotal = monthTxs.reduce((acc, t) => acc + t.amount, 0);
+                const monthCount = new Set(monthTxs.map(t => t.loanId)).size;
+                setText('loans-month-total', loans.length ? fmt(monthTotal) : '—');
+                setText('loans-month-note', monthCount
+                    ? `${monthCount} ${monthCount === 1 ? 'préstamo' : 'préstamos'} con cuota en ${this.monthLabelLong(monthKey)}.`
+                    : (loans.length ? `Sin cuotas en ${this.monthLabelLong(monthKey)}.` : 'Sin préstamos registrados.'));
+
+                const remainingTotal = entries.reduce((acc, entry) => acc + entry.stats.remainingAmount, 0);
+                const activeCount = entries.filter(entry => entry.stats.status === 'active' || entry.stats.status === 'upcoming').length;
+                setText('loans-remaining', loans.length ? fmt(remainingTotal) : '—');
+                const contractedTotal = loans.reduce((acc, loan) => acc + this.getLoanTotal(loan).total, 0);
+                setText('loans-remaining-note', loans.length
+                    ? `${activeCount} ${activeCount === 1 ? 'préstamo vigente' : 'préstamos vigentes'} · ${fmt(contractedTotal)} en total.`
+                    : 'Suma de las cuotas que quedan por pagar.');
+
+                const nextEntry = entries.filter(entry => entry.stats.next)
+                    .map(entry => ({ ...entry.stats.next, loan: entry.loan }))
+                    .sort((a, b) => a.date.localeCompare(b.date))[0];
+                setText('loans-next', nextEntry ? formatDateDisplay(nextEntry.date) : '—');
+                setText('loans-next-note', nextEntry ? `${nextEntry.loan.name}: ${fmt(nextEntry.amount)} (cuota ${nextEntry.number}/${nextEntry.loan.installments}).` : 'No hay cuotas pendientes.');
+
+                const monthIncome = this.getTransactionsForMonth(monthKey).filter(t => t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0);
+                if (monthTotal > 0 && monthIncome > 0) {
+                    const ratio = (monthTotal / monthIncome) * 100;
+                    setText('loans-ratio', `${ratio.toFixed(0)}%`);
+                    setTone('loans-ratio', ratio > 35 ? 'text-apple-red' : ratio > 30 ? 'text-apple-orange' : 'text-apple-green');
+                    setText('loans-ratio-note', `${ratio > 35 ? 'Elevado' : ratio > 30 ? 'En el límite' : 'Saludable'}: cuotas frente a los ingresos de ${this.monthLabelLong(monthKey)}. Referencia orientativa: máximo 35%.`);
+                } else {
+                    setText('loans-ratio', '—');
+                    setTone('loans-ratio', 'text-white');
+                    setText('loans-ratio-note', monthTotal > 0 ? `Sin ingresos registrados en ${this.monthLabelLong(monthKey)}.` : 'Sin cuotas este mes.');
+                }
+
+                // ----- Tarjetas -----
+                list.innerHTML = '';
+                empty.classList.toggle('hidden', loans.length > 0);
+                const types = this.getLoanTypes();
+                const frequencies = this.getLoanFrequencies();
+                entries.forEach(({ loan, stats }) => {
+                    const cat = this.db.categories.find(c => c.id === loan.category);
+                    const type = types[loan.type] || types.other;
+                    const expanded = this.expandedLoans.has(loan.id);
+                    const statusMap = {
+                        active: ['Activo', 'bg-apple-green/20 text-apple-green'],
+                        upcoming: [`Empieza el ${formatDateDisplay(loan.firstPaymentDate)}`, 'bg-apple-blue/20 text-apple-blue'],
+                        finished: ['Finalizado', 'bg-white/10 text-gray-400'],
+                        cancelled: ['Cancelado', 'bg-white/10 text-gray-400']
+                    };
+                    const [statusText, statusTone] = statusMap[stats.status];
+                    const pct = Math.round(stats.progress * 100);
+                    const facts = [
+                        ['Cuota', `${fmt(loan.installmentAmount + (loan.extraPerInstallment || 0))} · ${(frequencies[loan.frequency] || 'Mensual').toLowerCase()}`],
+                        ['Pagadas', `${stats.paid.length} de ${stats.schedule.length}`],
+                        ['Pendiente', fmt(stats.remainingAmount)],
+                        ['Última cuota', formatDateDisplay(stats.lastDate)]
+                    ];
+                    if (loan.interestRate > 0 || loan.apr > 0) {
+                        facts.push(['TIN / TAE', `${loan.interestRate > 0 ? loan.interestRate + '%' : '—'} / ${loan.apr > 0 ? loan.apr + '%' : '—'}`]);
+                    }
+                    if (stats.interest !== null) facts.push(['Intereses estimados', fmt(stats.interest)]);
+                    if (loan.openingFee > 0) facts.push(['Comisión de apertura', fmt(loan.openingFee)]);
+
+                    const totals = this.getLoanTotal(loan);
+                    const totalNote = totals.source === 'declared'
+                        ? (Math.abs(totals.declared - totals.computed) > 0.01 ? `Indicado por ti. Según las cuotas: ${fmt(totals.computed)}.` : 'Indicado por ti.')
+                        : `Calculado: ${totals.description}.`;
+                    facts.unshift(['Importe total del préstamo', fmt(totals.total), totalNote, true]);
+
+                    let scheduleHtml = '';
+                    if (expanded) {
+                        let balance = stats.scheduledTotal;
+                        const rows = stats.schedule.map(item => {
+                            balance -= item.amount;
+                            const isPaid = item.date <= todayISO;
+                            return `<tr class="hover:bg-white/5">
+                                <td class="p-2 text-gray-400">${item.number}</td>
+                                <td class="p-2 text-gray-300 whitespace-nowrap">${escapeHTML(formatDateDisplay(item.date))}</td>
+                                <td class="p-2 text-right font-mono text-white">${fmt(item.amount)}</td>
+                                <td class="p-2 text-right"><span class="px-1.5 py-0.5 rounded text-[10px] ${isPaid ? 'bg-apple-green/20 text-apple-green' : 'bg-white/10 text-gray-400'}">${isPaid ? 'Pagada' : 'Pendiente'}</span></td>
+                                <td class="p-2 text-right font-mono text-gray-400">${fmt(Math.max(0, balance))}</td>
+                            </tr>`;
+                        }).join('');
+                        scheduleHtml = `
+                            <div class="max-h-64 overflow-y-auto rounded-xl border border-white/10" id="loan-schedule-${escapeHTML(loan.id)}">
+                                <table class="w-full text-left text-xs">
+                                    <thead class="bg-white/5 text-gray-400 uppercase text-[10px]">
+                                        <tr><th class="p-2">Nº</th><th class="p-2">Fecha</th><th class="p-2 text-right">Importe</th><th class="p-2 text-right">Estado</th><th class="p-2 text-right">Pendiente tras la cuota</th></tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-white/5">${rows}</tbody>
+                                </table>
+                            </div>`;
+                    }
+
+                    const card = document.createElement('div');
+                    card.className = 'glass-panel p-5 rounded-2xl border border-white/10 space-y-4';
+                    card.innerHTML = `
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="w-10 h-10 rounded-xl bg-apple-purple/20 text-apple-purple flex items-center justify-center shrink-0"><i class="fa-solid ${type.icon}" aria-hidden="true"></i></div>
+                                <div class="min-w-0">
+                                    <div class="text-sm font-semibold text-white truncate">${escapeHTML(loan.name)}</div>
+                                    <div class="text-[11px] text-gray-400 truncate">${escapeHTML(type.label)}${loan.lender ? ' · ' + escapeHTML(loan.lender) : ''}${cat ? ' · ' + escapeHTML(cat.icon) + ' ' + escapeHTML(cat.name) : ''}</div>
+                                </div>
+                            </div>
+                            <span class="px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap ${statusTone}">${escapeHTML(statusText)}</span>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] text-gray-400 mb-1"><span>Progreso</span><span>${pct}%</span></div>
+                            <div class="w-full h-1.5 rounded-full bg-white/10 overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Progreso de ${escapeHTML(loan.name)}">
+                                <div class="h-full rounded-full bg-apple-purple" style="width: ${pct}%"></div>
+                            </div>
+                        </div>
+                        <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                            ${facts.map(([label, value, note, wide]) => `<div class="${wide ? 'col-span-2' : ''}"><dt class="text-[11px] text-gray-500">${escapeHTML(label)}</dt><dd class="text-white ${wide ? 'text-base font-bold' : 'font-medium'}">${escapeHTML(value)}</dd>${note ? `<div class="text-[11px] text-gray-500">${escapeHTML(note)}</div>` : ''}</div>`).join('')}
+                        </dl>
+                        ${loan.notes ? `<p class="text-[11px] text-gray-500">${escapeHTML(loan.notes)}</p>` : ''}
+                        ${scheduleHtml}
+                        <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
+                            <button type="button" onclick="app.toggleLoanSchedule('${escapeHTML(loan.id)}')" aria-expanded="${expanded}" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15 text-xs transition"><i class="fa-solid ${expanded ? 'fa-chevron-up' : 'fa-list-ol'} mr-1.5" aria-hidden="true"></i>${expanded ? 'Ocultar calendario' : 'Ver calendario'}</button>
+                            <button type="button" onclick="app.openLoanModal('${escapeHTML(loan.id)}')" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15 text-xs transition"><i class="fa-solid fa-pen mr-1.5" aria-hidden="true"></i>Editar</button>
+                            <button type="button" onclick="app.deleteLoan('${escapeHTML(loan.id)}')" class="px-3 py-1.5 rounded-lg bg-apple-red/15 text-apple-red hover:bg-apple-red/25 text-xs transition"><i class="fa-solid fa-trash mr-1.5" aria-hidden="true"></i>Eliminar</button>
+                        </div>
+                    `;
+                    list.appendChild(card);
+                });
+            }
+
+            toggleLoanSchedule(id) {
+                if (!this.expandedLoans) this.expandedLoans = new Set();
+                if (this.expandedLoans.has(id)) this.expandedLoans.delete(id);
+                else this.expandedLoans.add(id);
+                this.renderLoansTab();
+            }
+
+            openLoanFromTransaction(loanId) {
+                if (!this.expandedLoans) this.expandedLoans = new Set();
+                this.expandedLoans.add(loanId);
+                this.switchTab('loans');
+            }
+
+            openLoanModal(loanOrId = null) {
+                const existing = typeof loanOrId === 'string' ? (this.db.loans || []).find(l => l.id === loanOrId) : loanOrId;
+                if (typeof loanOrId === 'string' && !existing) return;
+                const isEdit = !!existing;
+                const loan = existing || {};
+                const container = document.getElementById('modal-container');
+                container.classList.remove('hidden');
+                const text = value => escapeHTML(String(value ?? ''));
+                const money = value => (value ? escapeHTML(String(value)) : '');
+                const today = this.localDateInputValue();
+
+                const expenseCategories = this.db.categories.filter(c => c.type === 'expense')
+                    .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+                const loansCategory = expenseCategories.find(c => c.id === 'cat_prestamos')
+                    || expenseCategories.find(c => /pr[ée]stamo|financiaci/i.test(c.name));
+                const selectedCategory = isEdit ? loan.category : (loansCategory ? loansCategory.id : '__new_loans');
+                const categoryOptions = expenseCategories.map(c =>
+                    `<option value="${text(c.id)}" ${selectedCategory === c.id ? 'selected' : ''}>${text(c.icon)} ${text(c.name)}</option>`).join('');
+                const createOption = loansCategory ? '' : `<option value="__new_loans" ${selectedCategory === '__new_loans' ? 'selected' : ''}>➕ Crear categoría «Préstamos y Financiación»</option>`;
+                const typeOptions = Object.entries(this.getLoanTypes()).map(([key, info]) =>
+                    `<option value="${key}" ${(loan.type || 'personal') === key ? 'selected' : ''}>${text(info.label)}</option>`).join('');
+                const frequencyOptions = Object.entries(this.getLoanFrequencies()).map(([key, label]) =>
+                    `<option value="${key}" ${Number(loan.frequency || 1) === Number(key) ? 'selected' : ''}>${text(label)}</option>`).join('');
+                const input = 'w-full px-3 py-2 apple-input rounded-xl text-white';
+                const mono = `${input} font-mono`;
+                const label = 'block text-gray-400 mb-1';
+
+                container.innerHTML = `
+                    <div class="glass-panel max-w-2xl w-full rounded-3xl p-6 shadow-2xl border border-white/10 relative space-y-4 max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="${isEdit ? 'Editar préstamo' : 'Nuevo préstamo'}">
+                        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+                            <h3 class="text-sm font-bold text-white">${isEdit ? 'Editar préstamo' : 'Nuevo préstamo o financiación'}</h3>
+                            <button type="button" onclick="app.closeModal()" aria-label="Cerrar" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+
+                        <form id="loan-form" onsubmit="app.saveLoan(event, '${isEdit ? text(loan.id) : ''}')" oninput="app.updateLoanFormSummary()" onchange="app.updateLoanFormSummary()" class="space-y-4 text-xs">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div><label class="${label}" for="loan-name">Nombre *</label>
+                                    <input type="text" id="loan-name" required maxlength="100" placeholder="Ej: Préstamo coche" value="${text(loan.name)}" class="${input}"></div>
+                                <div><label class="${label}" for="loan-lender">Entidad o acreedor</label>
+                                    <input type="text" id="loan-lender" maxlength="100" placeholder="Ej: Banco, financiera..." value="${text(loan.lender)}" class="${input}"></div>
+                                <div><label class="${label}" for="loan-type">Tipo</label>
+                                    <select id="loan-type" class="${input}">${typeOptions}</select></div>
+                                <div><label class="${label}" for="loan-category">Categoría de gasto *</label>
+                                    <select id="loan-category" required class="${input}">${categoryOptions}${createOption}</select></div>
+                            </div>
+
+                            <fieldset class="space-y-3">
+                                <legend class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Fechas y cuotas</legend>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div><label class="${label}" for="loan-start">Fecha de inicio o firma</label>
+                                        <input type="date" id="loan-start" value="${text(loan.startDate)}" class="${input}"></div>
+                                    <div><label class="${label}" for="loan-first">Fecha de la primera cuota *</label>
+                                        <input type="date" id="loan-first" required value="${text(loan.firstPaymentDate || today)}" class="${input}"></div>
+                                    <div><label class="${label}" for="loan-frequency">Periodicidad de las cuotas</label>
+                                        <select id="loan-frequency" class="${input}">${frequencyOptions}</select></div>
+                                    <div><label class="${label}" for="loan-installments">Número de cuotas *</label>
+                                        <input type="number" id="loan-installments" required min="1" max="600" step="1" placeholder="Ej: 36" value="${text(loan.installments)}" class="${mono}"></div>
+                                    <div><label class="${label}" for="loan-amount">Importe de la cuota (€) *</label>
+                                        <input type="number" id="loan-amount" min="0" step="0.01" placeholder="Ej: 285.50" value="${money(loan.installmentAmount)}" class="${mono}"></div>
+                                    <div><label class="${label}" for="loan-last-amount">Importe de la última cuota (€)</label>
+                                        <input type="number" id="loan-last-amount" min="0" step="0.01" placeholder="Si es distinta a las demás" value="${money(loan.lastInstallmentAmount)}" class="${mono}"></div>
+                                </div>
+                            </fieldset>
+
+                            <fieldset class="space-y-3">
+                                <legend class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Importes y coste</legend>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div><label class="${label}" for="loan-principal">Capital solicitado (€)</label>
+                                        <input type="number" id="loan-principal" min="0" step="0.01" value="${money(loan.principal)}" class="${mono}"></div>
+                                    <div><label class="${label}" for="loan-total">Importe total a devolver (€)</label>
+                                        <input type="number" id="loan-total" min="0" step="0.01" value="${money(loan.totalAmount)}" class="${mono}"></div>
+                                    <div><label class="${label}" for="loan-rate">TIN (%)</label>
+                                        <input type="number" id="loan-rate" min="0" max="100" step="0.001" value="${money(loan.interestRate)}" class="${mono}"></div>
+                                    <div><label class="${label}" for="loan-apr">TAE (%)</label>
+                                        <input type="number" id="loan-apr" min="0" max="100" step="0.001" value="${money(loan.apr)}" class="${mono}"></div>
+                                    <div><label class="${label}" for="loan-fee">Comisión de apertura (€)</label>
+                                        <input type="number" id="loan-fee" min="0" step="0.01" value="${money(loan.openingFee)}" class="${mono}"></div>
+                                    <div><label class="${label}" for="loan-extra">Seguro u otros gastos por cuota (€)</label>
+                                        <input type="number" id="loan-extra" min="0" step="0.01" value="${money(loan.extraPerInstallment)}" class="${mono}"></div>
+                                </div>
+                            </fieldset>
+
+                            <fieldset class="space-y-3">
+                                <legend class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Otras opciones</legend>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div><label class="${label}" for="loan-cancel">Cancelación anticipada (fecha)</label>
+                                        <input type="date" id="loan-cancel" value="${text(loan.cancelledOn)}" class="${input}"></div>
+                                    <div><label class="${label}" for="loan-notes">Notas</label>
+                                        <input type="text" id="loan-notes" maxlength="1000" placeholder="Detalles extra..." value="${text(loan.notes)}" class="${input}"></div>
+                                </div>
+                                <label class="flex items-start gap-2 text-gray-300 cursor-pointer">
+                                    <input type="checkbox" id="loan-include-past" ${loan.includePast === false ? '' : 'checked'} class="mt-0.5">
+                                    <span>Registrar también las cuotas anteriores al mes actual. Desmárcalo si ya las apuntaste a mano, para no duplicarlas.</span>
+                                </label>
+                            </fieldset>
+
+                            <div id="loan-summary" class="p-3 rounded-xl bg-white/5 border border-white/10 text-gray-300 space-y-1" aria-live="polite"></div>
+
+                            <div class="pt-1 flex justify-end gap-2">
+                                <button type="button" onclick="app.closeModal()" class="px-4 py-2 rounded-xl bg-white/10 text-gray-300 hover:bg-white/15">Cancelar</button>
+                                <button type="submit" class="px-4 py-2 rounded-xl bg-apple-blue hover:bg-blue-600 text-white font-medium">${isEdit ? 'Guardar cambios' : 'Añadir préstamo'}</button>
+                            </div>
+                        </form>
+                    </div>
+                `;
+                this.updateLoanFormSummary();
+            }
+
+            // Resumen en vivo del formulario: fechas, total de cuotas, intereses y avisos de coherencia.
+            updateLoanFormSummary() {
+                const box = document.getElementById('loan-summary');
+                if (!box) return;
+                const read = id => document.getElementById(id);
+                const number = id => { const value = Number(read(id) ? read(id).value : 0); return Number.isFinite(value) ? value : 0; };
+                const installments = Math.floor(number('loan-installments'));
+                const first = read('loan-first').value;
+                const resolved = this.resolveLoanAmounts(installments, number('loan-amount'), number('loan-total'), number('loan-last-amount'));
+                const lines = [];
+                if (installments < 1 || !isValidISODate(first) || !(resolved.installmentAmount > 0)) {
+                    box.innerHTML = '<div class="text-gray-400">Rellena la fecha de la primera cuota, el número de cuotas y el importe de la cuota (o el total a devolver) para ver el resumen.</div>';
+                    return;
+                }
+                const draft = {
+                    firstPaymentDate: first, frequency: Number(read('loan-frequency').value) || 1, installments,
+                    installmentAmount: resolved.installmentAmount, lastInstallmentAmount: resolved.lastInstallmentAmount,
+                    extraPerInstallment: number('loan-extra'), cancelledOn: isValidISODate(read('loan-cancel').value) ? read('loan-cancel').value : ''
+                };
+                const schedule = this.getLoanSchedule(draft);
+                if (!schedule.length) {
+                    box.innerHTML = '<div class="text-apple-orange">La fecha de cancelación es anterior a la primera cuota.</div>';
+                    return;
+                }
+                const total = schedule.reduce((acc, item) => acc + item.amount, 0);
+                const fee = number('loan-fee');
+                const principal = number('loan-principal');
+                lines.push(`<div><span class="text-gray-500">Calendario:</span> ${schedule.length} ${schedule.length === 1 ? 'cuota' : 'cuotas'}, de ${escapeHTML(formatDateDisplay(schedule[0].date))} a ${escapeHTML(formatDateDisplay(schedule[schedule.length - 1].date))}</div>`);
+                lines.push(`<div><span class="text-gray-500">Total en cuotas:</span> <span class="text-white font-medium">${this.formatCurrency(total)}</span>${fee > 0 ? ` + ${this.formatCurrency(fee)} de comisión de apertura` : ''}</div>`);
+                if (principal > 0) {
+                    const interest = Math.max(0, total - number('loan-extra') * schedule.length - principal);
+                    lines.push(`<div><span class="text-gray-500">Intereses estimados:</span> <span class="text-white font-medium">${this.formatCurrency(interest)}</span></div>`);
+                }
+                if (resolved.note) lines.push(`<div class="text-apple-blue">${escapeHTML(resolved.note)}</div>`);
+                const declaredTotal = number('loan-total');
+                if (declaredTotal > 0 && Math.abs(declaredTotal - (total - number('loan-extra') * schedule.length)) > 0.01) {
+                    lines.push(`<div class="text-apple-orange">Las cuotas suman ${this.formatCurrency(total - number('loan-extra') * schedule.length)} y el total indicado es ${this.formatCurrency(declaredTotal)}. Revisa la cuota o el número de cuotas.</div>`);
+                }
+                box.innerHTML = lines.join('');
+            }
+
+            async saveLoan(e, existingId) {
+                e.preventDefault();
+                const read = id => document.getElementById(id);
+                const number = id => { const raw = read(id).value; return raw === '' ? 0 : Number(raw); };
+                const installments = Math.floor(number('loan-installments'));
+                const resolved = this.resolveLoanAmounts(installments, number('loan-amount'), number('loan-total'), number('loan-last-amount'));
+                const categoryChoice = read('loan-category').value;
+                let loan;
+                try {
+                    loan = this.sanitizeLoanRecord({
+                        id: existingId || `loan_${crypto.randomUUID()}`,
+                        name: read('loan-name').value, lender: read('loan-lender').value, type: read('loan-type').value,
+                        category: categoryChoice, startDate: read('loan-start').value, firstPaymentDate: read('loan-first').value,
+                        frequency: Number(read('loan-frequency').value), installments,
+                        installmentAmount: resolved.installmentAmount, lastInstallmentAmount: resolved.lastInstallmentAmount,
+                        extraPerInstallment: number('loan-extra'), principal: number('loan-principal'), totalAmount: number('loan-total'),
+                        interestRate: number('loan-rate'), apr: number('loan-apr'), openingFee: number('loan-fee'),
+                        includePast: read('loan-include-past').checked, cancelledOn: read('loan-cancel').value, notes: read('loan-notes').value
+                    });
+                } catch (error) {
+                    this.showToast(`Revisa el préstamo: ${error.message}`, 'error');
+                    return;
+                }
+                if (loan.startDate && loan.startDate > loan.firstPaymentDate) {
+                    this.showToast('La fecha de inicio no puede ser posterior a la primera cuota.', 'error');
+                    return;
+                }
+                if (loan.cancelledOn && loan.cancelledOn < loan.firstPaymentDate) {
+                    this.showToast('La cancelación anticipada no puede ser anterior a la primera cuota.', 'error');
+                    return;
+                }
+                if (categoryChoice === '__new_loans') {
+                    const existingCategory = this.db.categories.find(c => c.name.toLocaleLowerCase('es-ES') === 'préstamos y financiación');
+                    if (existingCategory) loan.category = existingCategory.id;
+                    else {
+                        loan.category = `cat_${crypto.randomUUID()}`;
+                        this.db.categories.push({ id: loan.category, name: 'Préstamos y Financiación', type: 'expense', icon: '🏦', color: '#64D2FF', budget: 0, group: 'needs' });
+                    }
+                } else if (!this.db.categories.some(c => c.id === categoryChoice && c.type === 'expense')) {
+                    this.showToast('Selecciona una categoría de gasto válida.', 'error');
+                    return;
+                }
+                if (!Array.isArray(this.db.loans)) this.db.loans = [];
+                const index = this.db.loans.findIndex(l => l.id === loan.id);
+                if (index >= 0) this.db.loans[index] = loan;
+                else this.db.loans.push(loan);
+                this.loansVersion = (this.loansVersion || 0) + 1;
+
+                this.closeModal();
+                this.renderAll();
+                this.showToast(resolved.note || (existingId ? 'Préstamo actualizado.' : 'Préstamo añadido. Sus cuotas ya figuran como gasto en cada mes.'), 'success');
+                await this.saveData();
+            }
+
+            async deleteLoan(id) {
+                const loan = (this.db.loans || []).find(l => l.id === id);
+                if (!loan) return;
+                const stats = this.getLoanStats(loan);
+                const confirmed = confirm(
+                    `¿Quieres eliminar el préstamo «${loan.name}»?\n\n` +
+                    `Se quitarán sus ${stats.schedule.length} cuotas (${stats.paid.length} ya pagadas) de los meses correspondientes, ` +
+                    `por lo que cambiarán los totales, tendencias y análisis.\n\nEsta acción no se puede deshacer.`
+                );
+                if (!confirmed) return;
+                this.db.loans = this.db.loans.filter(l => l.id !== id);
+                if (this.expandedLoans) this.expandedLoans.delete(id);
+                this.loansVersion = (this.loansVersion || 0) + 1;
+                this.showToast('Préstamo eliminado.', 'info');
+                this.renderAll();
+                await this.saveData();
             }
 
             renderCategoryExpensesTab() {
@@ -3381,7 +4084,7 @@
                         const shown = sorted.slice(0, 10);
                         const items = shown.map(tx => `
                             <li class="flex items-center justify-between gap-3">
-                                <span class="min-w-0 truncate text-gray-300"><span class="text-gray-500 mr-2">${escapeHTML(formatDateDisplay(tx.date))}</span>${escapeHTML(tx.concept)}${recurrenceLabels[tx.recurrence] ? `<span class="ml-2 px-1.5 py-0.5 rounded bg-white/10 text-gray-400 text-[10px]">${recurrenceLabels[tx.recurrence]}</span>` : ''}</span>
+                                <span class="min-w-0 truncate text-gray-300"><span class="text-gray-500 mr-2">${escapeHTML(formatDateDisplay(tx.date))}</span>${escapeHTML(tx.concept)}${(tx.loanId || recurrenceLabels[tx.recurrence]) ? `<span class="ml-2 px-1.5 py-0.5 rounded bg-white/10 text-gray-400 text-[10px]">${tx.loanId ? 'Préstamo' : recurrenceLabels[tx.recurrence]}</span>` : ''}</span>
                                 <span class="font-mono text-apple-red whitespace-nowrap">${fmt(tx.amount)}</span>
                             </li>`).join('');
                         const more = sorted.length > shown.length ? `<p class="text-[11px] text-gray-500">y ${sorted.length - shown.length} movimientos más</p>` : '';
@@ -3559,8 +4262,12 @@
 
             async deleteCategory(id) {
                 const usedCount = this.db.transactions.filter(t => t.category === id).length;
-                const detail = usedCount ? ` Hay ${usedCount} movimiento(s) asociados; quedarán sin categoría.` : '';
+                const loanCount = (this.db.loans || []).filter(loan => loan.category === id).length;
+                let detail = usedCount ? ` Hay ${usedCount} movimiento(s) asociados; quedarán sin categoría.` : '';
+                if (loanCount) detail += ` Hay ${loanCount} préstamo(s) que usan esta categoría; sus cuotas quedarán sin categoría.`;
                 if (!confirm('¿Eliminar esta categoría?' + detail)) return;
+                (this.db.loans || []).forEach(loan => { if (loan.category === id) loan.category = ''; });
+                this.loansVersion = (this.loansVersion || 0) + 1;
                 this.db.categories = this.db.categories.filter(c => c.id !== id);
                 this.closeModal();
                 this.renderAll();
@@ -3595,7 +4302,7 @@
                 const emptyState = document.getElementById('analysis-monthly-summary-empty');
                 tbody.innerHTML = '';
 
-                const transactions = this.db.transactions.filter(t =>
+                const transactions = this.getAllTransactions().filter(t =>
                     typeof t.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(t.date)
                 );
 
@@ -3617,9 +4324,15 @@
                     else if (tx.type === 'expense') totals.expense += amount;
                 });
 
-                const monthKeys = Array.from(monthlyTotals.keys()).sort();
-                const firstMonth = monthKeys[0];
-                const lastMonth = monthKeys[monthKeys.length - 1];
+                // Meses mostrados: desde el primer mes con movimientos propios (las cuotas de préstamos no
+                // alargan el historial hacia atrás) hasta el mes en curso. Los meses futuros no aparecen.
+                const currentMonthKey = this.monthKeyFromDate(new Date());
+                const ownMonthKeys = this.db.transactions
+                    .map(tx => String(tx.date || '').slice(0, 7))
+                    .filter(key => /^\d{4}-\d{2}$/.test(key) && key <= currentMonthKey)
+                    .sort();
+                const firstMonth = ownMonthKeys.length ? ownMonthKeys[0] : currentMonthKey;
+                const lastMonth = currentMonthKey;
                 const [firstYear, firstMonthNumber] = firstMonth.split('-').map(Number);
                 const [lastYear, lastMonthNumber] = lastMonth.split('-').map(Number);
                 const allMonths = [];
@@ -3843,8 +4556,9 @@
                 const recurrenceLabels = { monthly: 'Mensual', annual: 'Anual' };
                 top.forEach(tx => {
                     const cat = this.db.categories.find(c => c.id === tx.category) || { icon: '🏷️', name: 'General' };
-                    const badge = recurrenceLabels[tx.recurrence]
-                        ? `<span class="ml-2 px-1.5 py-0.5 rounded bg-white/10 text-gray-400 text-[10px]">${recurrenceLabels[tx.recurrence]}</span>`
+                    const badgeLabel = tx.loanId ? 'Préstamo' : recurrenceLabels[tx.recurrence];
+                    const badge = badgeLabel
+                        ? `<span class="ml-2 px-1.5 py-0.5 rounded bg-white/10 text-gray-400 text-[10px]">${badgeLabel}</span>`
                         : '';
                     const tr = document.createElement('tr');
                     tr.className = 'hover:bg-white/5 transition';
@@ -3894,7 +4608,7 @@
 
                 // Periodo de los gráficos de evolución: 6 o 12 meses, o todo el histórico hasta el mes seleccionado.
                 const rangeSetting = this.analysisRange ?? 12;
-                const datedKeys = this.db.transactions.map(tx => String(tx.date || '').slice(0, 7)).filter(key => /^\d{4}-\d{2}$/.test(key)).sort();
+                const datedKeys = this.getAllTransactions().map(tx => String(tx.date || '').slice(0, 7)).filter(key => /^\d{4}-\d{2}$/.test(key)).sort();
                 const earliestKey = datedKeys.length ? datedKeys[0] : this.selectedMonth;
                 const [earliestYear, earliestMonth] = earliestKey.split('-').map(Number);
                 const spanToEarliest = (selectedYear - earliestYear) * 12 + selectedMonthNumber - earliestMonth + 1;
@@ -3986,7 +4700,7 @@
                 });
 
                 // 4. Cumulative net balance from the first recorded transaction through the selected month.
-                const validDates = this.db.transactions.map(tx => String(tx.date || '').slice(0, 7)).filter(key => /^\d{4}-\d{2}$/.test(key)).sort();
+                const validDates = this.getAllTransactions().map(tx => String(tx.date || '').slice(0, 7)).filter(key => /^\d{4}-\d{2}$/.test(key)).sort();
                 const firstKey = validDates.length ? validDates[0] : this.selectedMonth;
                 const [firstYear, firstMonth] = firstKey.split('-').map(Number);
                 const cumulativeRecords = [];
@@ -4022,8 +4736,8 @@
                 const income = currentTxs.filter(t => t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0);
                 const expenses = currentTxs.filter(t => t.type === 'expense').reduce((acc, t) => acc + Number(t.amount), 0);
 
-                const totalIncomeAll = this.db.transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0);
-                const totalExpenseAll = this.db.transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + Number(t.amount), 0);
+                const totalIncomeAll = this.getBalanceTransactions().filter(t => t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0);
+                const totalExpenseAll = this.getBalanceTransactions().filter(t => t.type === 'expense').reduce((acc, t) => acc + Number(t.amount), 0);
                 const netBalance = totalIncomeAll - totalExpenseAll;
 
                 // Health Score Calculation (0 - 100)
@@ -4040,6 +4754,14 @@
                 if (hasMonthlyData && expenses > 0) {
                     if (runwayMonths >= 6) score += 15;
                     else if (runwayMonths < 3) score -= 10;
+                }
+
+                // Peso de las cuotas de préstamos sobre los ingresos del mes (referencia orientativa: 30-35%).
+                const loanMonthTotal = this.getLoanInstallmentsTotal(this.selectedMonth);
+                const loanRatio = income > 0 && loanMonthTotal > 0 ? (loanMonthTotal / income) * 100 : null;
+                if (hasMonthlyData && loanRatio !== null) {
+                    if (loanRatio > 35) score -= 15;
+                    else if (loanRatio > 30) score -= 5;
                 }
 
                 score = hasMonthlyData ? Math.max(10, Math.min(100, Math.round(score))) : 0;
@@ -4108,6 +4830,38 @@
                         type: 'warning'
                     });
                 }
+
+                // Préstamos: endeudamiento, finalizaciones próximas y coste financiero alto.
+                if (loanRatio !== null && loanRatio > 30) {
+                    recommendations.push({
+                        title: loanRatio > 35 ? 'Endeudamiento elevado' : 'Endeudamiento en el límite',
+                        text: `Las cuotas de préstamos suman ${this.formatCurrency(loanMonthTotal)}, un ${loanRatio.toFixed(0)}% de tus ingresos del mes. Como referencia orientativa, conviene no superar el 35% (idealmente el 30%).`,
+                        type: loanRatio > 35 ? 'danger' : 'warning'
+                    });
+                }
+                const loanToday = new Date();
+                const loanTodayISO = this.localDateInputValue(loanToday);
+                const loanSoonISO = this.localDateInputValue(new Date(loanToday.getFullYear(), loanToday.getMonth() + 3, loanToday.getDate()));
+                (this.db.loans || []).forEach(loan => {
+                    const stats = this.getLoanStats(loan, loanTodayISO);
+                    if (stats.status !== 'active') return;
+                    const monthlyEquivalent = (loan.installmentAmount + (Number(loan.extraPerInstallment) || 0)) / (Number(loan.frequency) || 1);
+                    if (stats.lastDate <= loanSoonISO) {
+                        recommendations.push({
+                            title: `«${loan.name}» termina pronto`,
+                            text: `Su última cuota es en ${this.monthLabelLong(stats.lastDate.slice(0, 7))}. A partir de entonces liberarás unos ${this.formatCurrency(monthlyEquivalent)} al mes: buen momento para destinarlos a ahorro.`,
+                            type: 'info'
+                        });
+                    }
+                    const costRate = loan.apr > 0 ? loan.apr : loan.interestRate;
+                    if (costRate >= 10 && stats.remaining.length > 6) {
+                        recommendations.push({
+                            title: `Coste financiero alto en «${loan.name}»`,
+                            text: `Tiene un tipo del ${costRate}% y te quedan ${stats.remaining.length} cuotas (${this.formatCurrency(stats.remainingAmount)}). Valora una amortización anticipada o refinanciarlo si encuentras mejores condiciones.`,
+                            type: 'warning'
+                        });
+                    }
+                });
 
                 // Check categories exceeding budget
                 this.db.categories.forEach(cat => {
