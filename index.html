@@ -2530,6 +2530,9 @@
                     interestRate: percentOf(source.interestRate, 'El TIN'),
                     apr: percentOf(source.apr, 'La TAE'),
                     openingFee: amountOf(source.openingFee, 'La comisión de apertura'),
+                    downPayment: amountOf(source.downPayment, 'La entrada'),
+                    downPaymentDate: optionalDate(source.downPaymentDate, 'La fecha de la entrada'),
+                    registerDownPayment: source.registerDownPayment !== false,
                     includePast: source.includePast !== false,
                     cancelledOn: optionalDate(source.cancelledOn, 'La fecha de cancelación'),
                     notes: String(source.notes ?? '').slice(0, 1000)
@@ -2596,6 +2599,16 @@
                             });
                         }
                     }
+                    // La entrada es un gasto puntual (no una cuota): no cuenta como gasto fijo ni en el peso de las cuotas.
+                    if (loan.downPayment > 0 && loan.registerDownPayment !== false) {
+                        list.push({
+                            id: `loan_${loan.id}_down`, loanId: loan.id, installment: 0,
+                            concept: `${loan.name} · entrada`, amount: loan.downPayment,
+                            type: 'expense', category: loan.category,
+                            date: loan.downPaymentDate || loan.startDate || loan.firstPaymentDate,
+                            recurrence: 'none', notes: loan.lender || ''
+                        });
+                    }
                 });
                 this._loanTxCache = { ref: loans, version: this.loansVersion || 0, monthKey, list };
                 return list;
@@ -2652,10 +2665,14 @@
                     : `${count} ${count === 1 ? 'cuota' : 'cuotas'} de ${this.formatCurrency(regular)}`;
                 if (fee > 0) description += ` + ${this.formatCurrency(fee)} de comisión de apertura`;
                 if (extra > 0) description += ` (cada cuota incluye ${this.formatCurrency(extra)} de seguro u otros gastos)`;
+                const total = declared > 0 ? declared : computed;
+                const downPayment = Number(loan.downPayment) || 0;
                 return {
-                    total: declared > 0 ? declared : computed,
+                    total,
                     source: declared > 0 ? 'declared' : 'computed',
-                    computed, declared, description
+                    computed, declared, description,
+                    downPayment,
+                    totalCost: Math.round((total + downPayment) * 100) / 100
                 };
             }
 
@@ -3627,7 +3644,16 @@
                     const totalNote = totals.source === 'declared'
                         ? (Math.abs(totals.declared - totals.computed) > 0.01 ? `Indicado por ti. Según las cuotas: ${fmt(totals.computed)}.` : 'Indicado por ti.')
                         : `Calculado: ${totals.description}.`;
-                    facts.unshift(['Importe total del préstamo', fmt(totals.total), totalNote, true]);
+                    if (totals.downPayment > 0) {
+                        const downDate = loan.downPaymentDate || loan.startDate || loan.firstPaymentDate;
+                        facts.unshift(
+                            ['Financiado (cuotas)', fmt(totals.total), totalNote, false, true],
+                            ['Coste total con entrada', fmt(totals.totalCost), `Entrada ${fmt(totals.downPayment)} + financiado ${fmt(totals.total)}.`, false, true],
+                            ['Entrada', fmt(totals.downPayment), `${formatDateDisplay(downDate)}${loan.registerDownPayment === false ? ' · no registrada como gasto' : ''}`]
+                        );
+                    } else {
+                        facts.unshift(['Importe total del préstamo', fmt(totals.total), totalNote, true, true]);
+                    }
 
                     let scheduleHtml = '';
                     if (expanded) {
@@ -3674,7 +3700,7 @@
                             </div>
                         </div>
                         <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                            ${facts.map(([label, value, note, wide]) => `<div class="${wide ? 'col-span-2' : ''}"><dt class="text-[11px] text-gray-500">${escapeHTML(label)}</dt><dd class="text-white ${wide ? 'text-base font-bold' : 'font-medium'}">${escapeHTML(value)}</dd>${note ? `<div class="text-[11px] text-gray-500">${escapeHTML(note)}</div>` : ''}</div>`).join('')}
+                            ${facts.map(([label, value, note, wide, big]) => `<div class="${wide ? 'col-span-2' : ''}"><dt class="text-[11px] text-gray-500">${escapeHTML(label)}</dt><dd class="text-white ${big ? 'text-base font-bold' : 'font-medium'}">${escapeHTML(value)}</dd>${note ? `<div class="text-[11px] text-gray-500">${escapeHTML(note)}</div>` : ''}</div>`).join('')}
                         </dl>
                         ${loan.notes ? `<p class="text-[11px] text-gray-500">${escapeHTML(loan.notes)}</p>` : ''}
                         ${scheduleHtml}
@@ -3780,6 +3806,11 @@
                                         <input type="number" id="loan-fee" min="0" step="0.01" value="${money(loan.openingFee)}" class="${mono}"></div>
                                     <div><label class="${label}" for="loan-extra">Seguro u otros gastos por cuota (€)</label>
                                         <input type="number" id="loan-extra" min="0" step="0.01" value="${money(loan.extraPerInstallment)}" class="${mono}"></div>
+                                    <div><label class="${label}" for="loan-down">Entrada o pago inicial (€)</label>
+                                        <input type="number" id="loan-down" min="0" step="0.01" placeholder="Lo que pagas al contado" value="${money(loan.downPayment)}" class="${mono}"></div>
+                                    <div><label class="${label}" for="loan-down-date">Fecha de la entrada</label>
+                                        <input type="date" id="loan-down-date" value="${text(loan.downPaymentDate)}" class="${input}">
+                                        <div class="text-[11px] text-gray-500 mt-1">Si la dejas vacía, se usa la fecha de inicio o la de la primera cuota.</div></div>
                                 </div>
                             </fieldset>
 
@@ -3794,6 +3825,10 @@
                                 <label class="flex items-start gap-2 text-gray-300 cursor-pointer">
                                     <input type="checkbox" id="loan-include-past" ${loan.includePast === false ? '' : 'checked'} class="mt-0.5">
                                     <span>Registrar también las cuotas anteriores al mes actual. Desmárcalo si ya las apuntaste a mano, para no duplicarlas.</span>
+                                </label>
+                                <label class="flex items-start gap-2 text-gray-300 cursor-pointer">
+                                    <input type="checkbox" id="loan-register-down" ${loan.registerDownPayment === false ? '' : 'checked'} class="mt-0.5">
+                                    <span>Registrar la entrada como gasto. Desmárcalo si ya la apuntaste a mano en Transacciones.</span>
                                 </label>
                             </fieldset>
 
@@ -3838,6 +3873,10 @@
                 const principal = number('loan-principal');
                 lines.push(`<div><span class="text-gray-500">Calendario:</span> ${schedule.length} ${schedule.length === 1 ? 'cuota' : 'cuotas'}, de ${escapeHTML(formatDateDisplay(schedule[0].date))} a ${escapeHTML(formatDateDisplay(schedule[schedule.length - 1].date))}</div>`);
                 lines.push(`<div><span class="text-gray-500">Total en cuotas:</span> <span class="text-white font-medium">${this.formatCurrency(total)}</span>${fee > 0 ? ` + ${this.formatCurrency(fee)} de comisión de apertura` : ''}</div>`);
+                const down = number('loan-down');
+                if (down > 0) {
+                    lines.push(`<div><span class="text-gray-500">Coste total con entrada:</span> <span class="text-white font-medium">${this.formatCurrency(down + total + fee)}</span> (entrada ${this.formatCurrency(down)} + cuotas${fee > 0 ? ' + comisión' : ''})</div>`);
+                }
                 if (principal > 0) {
                     const interest = Math.max(0, total - number('loan-extra') * schedule.length - principal);
                     lines.push(`<div><span class="text-gray-500">Intereses estimados:</span> <span class="text-white font-medium">${this.formatCurrency(interest)}</span></div>`);
@@ -3867,6 +3906,8 @@
                         installmentAmount: resolved.installmentAmount, lastInstallmentAmount: resolved.lastInstallmentAmount,
                         extraPerInstallment: number('loan-extra'), principal: number('loan-principal'), totalAmount: number('loan-total'),
                         interestRate: number('loan-rate'), apr: number('loan-apr'), openingFee: number('loan-fee'),
+                        downPayment: number('loan-down'), downPaymentDate: read('loan-down-date').value,
+                        registerDownPayment: read('loan-register-down').checked,
                         includePast: read('loan-include-past').checked, cancelledOn: read('loan-cancel').value, notes: read('loan-notes').value
                     });
                 } catch (error) {
@@ -3875,6 +3916,10 @@
                 }
                 if (loan.startDate && loan.startDate > loan.firstPaymentDate) {
                     this.showToast('La fecha de inicio no puede ser posterior a la primera cuota.', 'error');
+                    return;
+                }
+                if (loan.downPaymentDate && loan.downPaymentDate > loan.firstPaymentDate) {
+                    this.showToast('La fecha de la entrada no puede ser posterior a la primera cuota.', 'error');
                     return;
                 }
                 if (loan.cancelledOn && loan.cancelledOn < loan.firstPaymentDate) {
