@@ -2533,6 +2533,10 @@
                     downPayment: amountOf(source.downPayment, 'La entrada'),
                     downPaymentDate: optionalDate(source.downPaymentDate, 'La fecha de la entrada'),
                     registerDownPayment: source.registerDownPayment !== false,
+                    settledOn: optionalDate(source.settledOn, 'La fecha de liquidación'),
+                    settlementAmount: amountOf(source.settlementAmount, 'El importe de la liquidación'),
+                    settlementFee: amountOf(source.settlementFee, 'La comisión de liquidación'),
+                    registerSettlement: source.registerSettlement !== false,
                     includePast: source.includePast !== false,
                     cancelledOn: optionalDate(source.cancelledOn, 'La fecha de cancelación'),
                     notes: String(source.notes ?? '').slice(0, 1000)
@@ -2564,6 +2568,7 @@
                 for (let number = 1; number <= loan.installments; number++) {
                     const date = this.localDateInputValue(this.addMonthsClamped(loan.firstPaymentDate, (number - 1) * step));
                     if (loan.cancelledOn && date > loan.cancelledOn) break;
+                    if (loan.settledOn && date > loan.settledOn) break;
                     const isLast = number === loan.installments;
                     const base = isLast && loan.lastInstallmentAmount > 0 ? loan.lastInstallmentAmount : loan.installmentAmount;
                     schedule.push({ number, date, amount: Math.round((base + extra) * 100) / 100 });
@@ -2596,6 +2601,23 @@
                                 id: `loan_${loan.id}_fee`, loanId: loan.id, installment: 0,
                                 concept: `${loan.name} · comisión de apertura`, amount: loan.openingFee,
                                 type: 'expense', category: loan.category, date: feeDate, recurrence: 'none', notes: loan.lender || ''
+                            });
+                        }
+                    }
+                    // La liquidación (y su comisión) son gastos puntuales en la fecha en que se cancela el préstamo.
+                    if (loan.settledOn && loan.registerSettlement !== false) {
+                        if (loan.settlementAmount > 0) {
+                            list.push({
+                                id: `loan_${loan.id}_settle`, loanId: loan.id, installment: 0,
+                                concept: `${loan.name} · liquidación`, amount: loan.settlementAmount,
+                                type: 'expense', category: loan.category, date: loan.settledOn, recurrence: 'none', notes: loan.lender || ''
+                            });
+                        }
+                        if (loan.settlementFee > 0) {
+                            list.push({
+                                id: `loan_${loan.id}_settlefee`, loanId: loan.id, installment: 0,
+                                concept: `${loan.name} · comisión por cancelación anticipada`, amount: loan.settlementFee,
+                                type: 'expense', category: loan.category, date: loan.settledOn, recurrence: 'none', notes: loan.lender || ''
                             });
                         }
                     }
@@ -2634,7 +2656,8 @@
                 const extra = Number(loan.extraPerInstallment) || 0;
                 const scheduledTotal = sumOf(schedule);
                 let status = 'active';
-                if (schedule.length === 0) status = 'cancelled';
+                if (loan.settledOn && loan.settledOn <= todayISO) status = 'settled';
+                else if (schedule.length === 0) status = 'cancelled';
                 else if (schedule[0].date > todayISO) status = 'upcoming';
                 else if (remaining.length === 0) status = schedule.length < loan.installments ? 'cancelled' : 'finished';
                 return {
@@ -2651,7 +2674,7 @@
             // todas las cuotas del plan completo (con la última cuota distinta y el seguro/otros gastos por cuota)
             // más la comisión de apertura. La cancelación anticipada no reduce el total del contrato.
             getLoanTotal(loan) {
-                const plan = this.getLoanSchedule({ ...loan, cancelledOn: '' });
+                const plan = this.getLoanSchedule({ ...loan, cancelledOn: '', settledOn: '' });
                 const installmentsTotal = plan.reduce((acc, item) => acc + item.amount, 0);
                 const fee = Number(loan.openingFee) || 0;
                 const extra = Number(loan.extraPerInstallment) || 0;
@@ -2673,6 +2696,25 @@
                     computed, declared, description,
                     downPayment,
                     totalCost: Math.round((total + downPayment) * 100) / 100
+                };
+            }
+
+            // Resultado de una liquidación: cuotas que se evitan, ahorro frente a ellas y coste real del préstamo
+            // (entrada + cuotas pagadas + comisión de apertura + liquidación + comisión de cancelación).
+            getLoanSettlement(loan, todayISO = this.localDateInputValue()) {
+                if (!loan.settledOn) return null;
+                const effective = this.getLoanSchedule({ ...loan, settledOn: '' });
+                const sumOf = list => list.reduce((acc, item) => acc + item.amount, 0);
+                const avoided = effective.filter(item => item.date > loan.settledOn);
+                const paidPlan = effective.filter(item => item.date <= loan.settledOn);
+                const amount = Number(loan.settlementAmount) || 0;
+                const fee = Number(loan.settlementFee) || 0;
+                const avoidedAmount = Math.round(sumOf(avoided) * 100) / 100;
+                return {
+                    date: loan.settledOn, done: loan.settledOn <= todayISO,
+                    amount, fee, avoidedCount: avoided.length, avoidedAmount,
+                    savings: Math.round((avoidedAmount - amount - fee) * 100) / 100,
+                    realCost: Math.round(((Number(loan.downPayment) || 0) + sumOf(paidPlan) + (Number(loan.openingFee) || 0) + amount + fee) * 100) / 100
                 };
             }
 
@@ -3623,6 +3665,7 @@
                     const statusMap = {
                         active: ['Activo', 'bg-apple-green/20 text-apple-green'],
                         upcoming: [`Empieza el ${formatDateDisplay(loan.firstPaymentDate)}`, 'bg-apple-blue/20 text-apple-blue'],
+                        settled: [`Liquidado el ${formatDateDisplay(loan.settledOn)}`, 'bg-apple-green/20 text-apple-green'],
                         finished: ['Finalizado', 'bg-white/10 text-gray-400'],
                         cancelled: ['Cancelado', 'bg-white/10 text-gray-400']
                     };
@@ -3644,6 +3687,7 @@
                     const totalNote = totals.source === 'declared'
                         ? (Math.abs(totals.declared - totals.computed) > 0.01 ? `Indicado por ti. Según las cuotas: ${fmt(totals.computed)}.` : 'Indicado por ti.')
                         : `Calculado: ${totals.description}.`;
+                    const settlement = this.getLoanSettlement(loan, todayISO);
                     if (totals.downPayment > 0) {
                         const downDate = loan.downPaymentDate || loan.startDate || loan.firstPaymentDate;
                         facts.unshift(
@@ -3653,6 +3697,13 @@
                         );
                     } else {
                         facts.unshift(['Importe total del préstamo', fmt(totals.total), totalNote, true, true]);
+                    }
+                    if (settlement) {
+                        facts.unshift(
+                            [settlement.done ? 'Coste real total' : 'Coste real total (previsto)', fmt(settlement.realCost), 'Entrada + cuotas pagadas + comisión de apertura + liquidación + comisión de cancelación.', true, true],
+                            [settlement.done ? 'Liquidación' : 'Liquidación prevista', fmt(settlement.amount), `${formatDateDisplay(settlement.date)}${settlement.fee > 0 ? ` · + ${fmt(settlement.fee)} de comisión` : ''}${loan.registerSettlement === false ? ' · no registrada como gasto' : ''}`],
+                            [settlement.savings >= 0 ? 'Ahorro frente a las cuotas pendientes' : 'Sobrecoste frente a las cuotas pendientes', fmt(Math.abs(settlement.savings)), `${settlement.avoidedCount} ${settlement.avoidedCount === 1 ? 'cuota evitada' : 'cuotas evitadas'} (${fmt(settlement.avoidedAmount)}).`]
+                        );
                     }
 
                     let scheduleHtml = '';
@@ -3706,6 +3757,10 @@
                         ${scheduleHtml}
                         <div class="flex flex-wrap items-center justify-end gap-2 pt-1">
                             <button type="button" onclick="app.toggleLoanSchedule('${escapeHTML(loan.id)}')" aria-expanded="${expanded}" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15 text-xs transition"><i class="fa-solid ${expanded ? 'fa-chevron-up' : 'fa-list-ol'} mr-1.5" aria-hidden="true"></i>${expanded ? 'Ocultar calendario' : 'Ver calendario'}</button>
+                            ${loan.settledOn ? `
+                            <button type="button" onclick="app.openSettleLoanModal('${escapeHTML(loan.id)}')" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15 text-xs transition"><i class="fa-solid fa-flag-checkered mr-1.5" aria-hidden="true"></i>Editar liquidación</button>
+                            <button type="button" onclick="app.reopenLoan('${escapeHTML(loan.id)}')" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15 text-xs transition"><i class="fa-solid fa-rotate-left mr-1.5" aria-hidden="true"></i>Reabrir préstamo</button>` : (stats.status === 'active' || stats.status === 'upcoming') ? `
+                            <button type="button" onclick="app.openSettleLoanModal('${escapeHTML(loan.id)}')" class="px-3 py-1.5 rounded-lg bg-apple-green/15 text-apple-green hover:bg-apple-green/25 text-xs transition"><i class="fa-solid fa-flag-checkered mr-1.5" aria-hidden="true"></i>Liquidar</button>` : ''}
                             <button type="button" onclick="app.openLoanModal('${escapeHTML(loan.id)}')" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15 text-xs transition"><i class="fa-solid fa-pen mr-1.5" aria-hidden="true"></i>Editar</button>
                             <button type="button" onclick="app.deleteLoan('${escapeHTML(loan.id)}')" class="px-3 py-1.5 rounded-lg bg-apple-red/15 text-apple-red hover:bg-apple-red/25 text-xs transition"><i class="fa-solid fa-trash mr-1.5" aria-hidden="true"></i>Eliminar</button>
                         </div>
@@ -3817,8 +3872,9 @@
                             <fieldset class="space-y-3">
                                 <legend class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Otras opciones</legend>
                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div><label class="${label}" for="loan-cancel">Cancelación anticipada (fecha)</label>
-                                        <input type="date" id="loan-cancel" value="${text(loan.cancelledOn)}" class="${input}"></div>
+                                    <div><label class="${label}" for="loan-cancel">Fin anticipado sin registrar pago (fecha)</label>
+                                        <input type="date" id="loan-cancel" value="${text(loan.cancelledOn)}" class="${input}">
+                                        <div class="text-[11px] text-gray-500 mt-1">Para cuando ya lo liquidaste y apuntaste el pago a mano. Para registrar la liquidación, usa el botón «Liquidar» de su tarjeta.</div></div>
                                     <div><label class="${label}" for="loan-notes">Notas</label>
                                         <input type="text" id="loan-notes" maxlength="1000" placeholder="Detalles extra..." value="${text(loan.notes)}" class="${input}"></div>
                                 </div>
@@ -3842,6 +3898,125 @@
                     </div>
                 `;
                 this.updateLoanFormSummary();
+            }
+
+            // ---------- Liquidación de un préstamo ----------
+            openSettleLoanModal(id) {
+                const loan = (this.db.loans || []).find(l => l.id === id);
+                if (!loan) return;
+                this._settleLoanId = id;
+                const container = document.getElementById('modal-container');
+                container.classList.remove('hidden');
+                const text = value => escapeHTML(String(value ?? ''));
+                const editing = !!loan.settledOn;
+                const date = editing ? loan.settledOn : this.localDateInputValue();
+                const effective = this.getLoanSchedule({ ...loan, settledOn: '' });
+                const pending = Math.round(effective.filter(item => item.date > date).reduce((acc, item) => acc + item.amount, 0) * 100) / 100;
+                const amount = editing ? loan.settlementAmount : pending;
+                const input = 'w-full px-3 py-2 apple-input rounded-xl text-white';
+                const label = 'block text-gray-400 mb-1';
+                container.innerHTML = `
+                    <div class="glass-panel max-w-md w-full rounded-3xl p-6 shadow-2xl border border-white/10 relative space-y-4 max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Liquidar préstamo">
+                        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+                            <h3 class="text-sm font-bold text-white">${editing ? 'Editar liquidación' : 'Liquidar'}: ${text(loan.name)}</h3>
+                            <button type="button" onclick="app.closeModal()" aria-label="Cerrar" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <form id="settle-form" onsubmit="app.saveLoanSettlement(event)" oninput="app.updateSettleSummary(event)" onchange="app.updateSettleSummary(event)" class="space-y-3 text-xs">
+                            <div><label class="${label}" for="settle-date">Fecha de liquidación *</label>
+                                <input type="date" id="settle-date" required value="${text(date)}" class="${input}"></div>
+                            <div><label class="${label}" for="settle-amount">Importe pagado para liquidar (€) *</label>
+                                <input type="number" id="settle-amount" required min="0" step="0.01" value="${text(amount)}" data-auto="${editing ? '0' : '1'}" class="${input} font-mono">
+                                <div class="text-[11px] text-gray-500 mt-1">Viene rellenado con las cuotas que quedaban por pagar. Cámbialo por lo que pagaste en realidad.</div></div>
+                            <div><label class="${label}" for="settle-fee">Comisión por cancelación anticipada (€)</label>
+                                <input type="number" id="settle-fee" min="0" step="0.01" value="${loan.settlementFee ? text(loan.settlementFee) : ''}" class="${input} font-mono"></div>
+                            <label class="flex items-start gap-2 text-gray-300 cursor-pointer">
+                                <input type="checkbox" id="settle-register" ${loan.registerSettlement === false ? '' : 'checked'} class="mt-0.5">
+                                <span>Registrar la liquidación como gasto. Desmárcalo si ya la apuntaste a mano en Transacciones.</span>
+                            </label>
+                            <div id="settle-summary" class="p-3 rounded-xl bg-white/5 border border-white/10 text-gray-300 space-y-1" aria-live="polite"></div>
+                            <div class="pt-1 flex justify-end gap-2">
+                                <button type="button" onclick="app.closeModal()" class="px-4 py-2 rounded-xl bg-white/10 text-gray-300 hover:bg-white/15">Cancelar</button>
+                                <button type="submit" class="px-4 py-2 rounded-xl bg-apple-green hover:bg-green-600 text-white font-medium">${editing ? 'Guardar liquidación' : 'Liquidar préstamo'}</button>
+                            </div>
+                        </form>
+                    </div>
+                `;
+                this.updateSettleSummary();
+            }
+
+            updateSettleSummary(event) {
+                const loan = (this.db.loans || []).find(l => l.id === this._settleLoanId);
+                const box = document.getElementById('settle-summary');
+                if (!loan || !box) return;
+                const dateInput = document.getElementById('settle-date');
+                const amountInput = document.getElementById('settle-amount');
+                const feeInput = document.getElementById('settle-fee');
+                const date = dateInput.value;
+                const effective = this.getLoanSchedule({ ...loan, settledOn: '' });
+                const avoided = isValidISODate(date) ? effective.filter(item => item.date > date) : [];
+                const avoidedAmount = Math.round(avoided.reduce((acc, item) => acc + item.amount, 0) * 100) / 100;
+                const targetId = event && event.target ? event.target.id : '';
+                if (targetId === 'settle-amount') amountInput.dataset.auto = '0';
+                else if (targetId === 'settle-date' && amountInput.dataset.auto !== '0') amountInput.value = String(avoidedAmount);
+                if (!isValidISODate(date)) {
+                    box.innerHTML = '<div class="text-gray-400">Indica la fecha de liquidación para ver el resumen.</div>';
+                    return;
+                }
+                const amount = Number(amountInput.value) || 0;
+                const fee = Number(feeInput.value) || 0;
+                const savings = Math.round((avoidedAmount - amount - fee) * 100) / 100;
+                const lines = [];
+                lines.push(`<div>El préstamo finaliza el <span class="text-white font-medium">${escapeHTML(formatDateDisplay(date))}</span>: ${avoided.length === 0 ? 'no quedan cuotas posteriores.' : `dejarán de registrarse ${avoided.length} ${avoided.length === 1 ? 'cuota' : 'cuotas'} (${this.formatCurrency(avoidedAmount)}).`}</div>`);
+                lines.push(`<div><span class="text-gray-500">${savings >= 0 ? 'Ahorro estimado' : 'Sobrecoste'}:</span> <span class="${savings >= 0 ? 'text-apple-green' : 'text-apple-orange'} font-medium">${this.formatCurrency(Math.abs(savings))}</span> frente a pagar las cuotas pendientes.</div>`);
+                box.innerHTML = lines.join('');
+            }
+
+            async saveLoanSettlement(e) {
+                e.preventDefault();
+                const loan = (this.db.loans || []).find(l => l.id === this._settleLoanId);
+                if (!loan) return;
+                const date = document.getElementById('settle-date').value;
+                const amount = Number(document.getElementById('settle-amount').value);
+                const fee = Number(document.getElementById('settle-fee').value) || 0;
+                const startLimit = loan.startDate || loan.firstPaymentDate;
+                if (!isValidISODate(date)) { this.showToast('Indica una fecha de liquidación válida.', 'error'); return; }
+                if (date < startLimit) { this.showToast('La liquidación no puede ser anterior al inicio del préstamo.', 'error'); return; }
+                if (!Number.isFinite(amount) || amount < 0 || !Number.isFinite(fee) || fee < 0) { this.showToast('Revisa los importes de la liquidación.', 'error'); return; }
+                let updated;
+                try {
+                    updated = this.sanitizeLoanRecord({
+                        ...loan, settledOn: date, settlementAmount: amount, settlementFee: fee,
+                        registerSettlement: document.getElementById('settle-register').checked
+                    });
+                } catch (error) {
+                    this.showToast(`Revisa la liquidación: ${error.message}`, 'error');
+                    return;
+                }
+                const index = this.db.loans.findIndex(l => l.id === loan.id);
+                this.db.loans[index] = updated;
+                this.loansVersion = (this.loansVersion || 0) + 1;
+                this.closeModal();
+                this.renderAll();
+                this.showToast(date <= this.localDateInputValue() ? 'Préstamo liquidado. Ya no se registrarán más cuotas.' : 'Liquidación programada.', 'success');
+                await this.saveData();
+            }
+
+            async reopenLoan(id) {
+                const loan = (this.db.loans || []).find(l => l.id === id);
+                if (!loan || !loan.settledOn) return;
+                const registered = loan.registerSettlement !== false ? (loan.settlementAmount || 0) + (loan.settlementFee || 0) : 0;
+                const confirmed = confirm(
+                    `¿Reabrir el préstamo «${loan.name}»?\n\n` +
+                    `Se quitará la liquidación${registered > 0 ? ` (${this.formatCurrency(registered)} registrados como gasto)` : ''} ` +
+                    `y volverán a generarse las cuotas posteriores a ${formatDateDisplay(loan.settledOn)}.`
+                );
+                if (!confirmed) return;
+                this.db.loans = this.db.loans.map(l => l.id === id
+                    ? { ...l, settledOn: '', settlementAmount: 0, settlementFee: 0, registerSettlement: true } : l);
+                this.loansVersion = (this.loansVersion || 0) + 1;
+                this.showToast('Préstamo reabierto.', 'info');
+                this.renderAll();
+                await this.saveData();
             }
 
             // Resumen en vivo del formulario: fechas, total de cuotas, intereses y avisos de coherencia.
@@ -3896,6 +4071,7 @@
                 const installments = Math.floor(number('loan-installments'));
                 const resolved = this.resolveLoanAmounts(installments, number('loan-amount'), number('loan-total'), number('loan-last-amount'));
                 const categoryChoice = read('loan-category').value;
+                const previous = existingId ? (this.db.loans || []).find(l => l.id === existingId) : null;
                 let loan;
                 try {
                     loan = this.sanitizeLoanRecord({
@@ -3908,6 +4084,8 @@
                         interestRate: number('loan-rate'), apr: number('loan-apr'), openingFee: number('loan-fee'),
                         downPayment: number('loan-down'), downPaymentDate: read('loan-down-date').value,
                         registerDownPayment: read('loan-register-down').checked,
+                        settledOn: previous ? previous.settledOn : '', settlementAmount: previous ? previous.settlementAmount : 0,
+                        settlementFee: previous ? previous.settlementFee : 0, registerSettlement: previous ? previous.registerSettlement : true,
                         includePast: read('loan-include-past').checked, cancelledOn: read('loan-cancel').value, notes: read('loan-notes').value
                     });
                 } catch (error) {
@@ -4888,6 +5066,16 @@
                 const loanTodayISO = this.localDateInputValue(loanToday);
                 const loanSoonISO = this.localDateInputValue(new Date(loanToday.getFullYear(), loanToday.getMonth() + 3, loanToday.getDate()));
                 (this.db.loans || []).forEach(loan => {
+                    const settlement = this.getLoanSettlement(loan, loanTodayISO);
+                    const recentLimitISO = this.localDateInputValue(new Date(loanToday.getFullYear(), loanToday.getMonth() - 3, loanToday.getDate()));
+                    if (settlement && settlement.done && settlement.date >= recentLimitISO && settlement.savings > 0) {
+                        const freed = (loan.installmentAmount + (Number(loan.extraPerInstallment) || 0)) / (Number(loan.frequency) || 1);
+                        recommendations.push({
+                            title: `Liquidaste «${loan.name}»`,
+                            text: `Pagaste ${this.formatCurrency(settlement.amount + settlement.fee)} en lugar de las ${settlement.avoidedCount} cuotas pendientes (${this.formatCurrency(settlement.avoidedAmount)}), un ahorro de ${this.formatCurrency(settlement.savings)}. Además liberas unos ${this.formatCurrency(freed)} al mes: buen momento para destinarlos a ahorro.`,
+                            type: 'info'
+                        });
+                    }
                     const stats = this.getLoanStats(loan, loanTodayISO);
                     if (stats.status !== 'active') return;
                     const monthlyEquivalent = (loan.installmentAmount + (Number(loan.extraPerInstallment) || 0)) / (Number(loan.frequency) || 1);
