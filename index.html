@@ -1219,6 +1219,27 @@
                         <p class="text-xs text-gray-300 leading-relaxed" id="ce-highlights"></p>
                     </div>
 
+                    <!-- Evolución del gasto de una categoría -->
+                    <div class="glass-panel p-5 rounded-2xl border border-white/10 space-y-4">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <h3 class="text-sm font-semibold text-white">Evolución de una categoría</h3>
+                                <p class="text-xs text-gray-400 mt-1" id="cat-trend-note">Elige una categoría para ver su gasto mes a mes y su media.</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <label class="sr-only" for="cat-trend-select">Categoría</label>
+                                <select id="cat-trend-select" onchange="app.setCategoryTrendCategory(this.value)" class="apple-input rounded-xl text-xs text-white px-3 py-1.5"></select>
+                                <div id="cat-trend-range-group" role="group" aria-label="Periodo de la evolución de la categoría" class="inline-flex rounded-xl bg-white/5 border border-white/10 p-0.5 text-xs">
+                                    <button type="button" data-range="6" aria-pressed="false" onclick="app.setCategoryTrendRange(6)" class="px-3 py-1.5 rounded-lg font-medium transition">6 meses</button>
+                                    <button type="button" data-range="12" aria-pressed="true" onclick="app.setCategoryTrendRange(12)" class="px-3 py-1.5 rounded-lg font-medium transition">12 meses</button>
+                                    <button type="button" data-range="0" aria-pressed="false" onclick="app.setCategoryTrendRange(0)" class="px-3 py-1.5 rounded-lg font-medium transition">Todo</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="h-64 relative" id="cat-trend-chart-wrap"><canvas id="chart-category-trend" role="img" aria-label="Gasto mensual de la categoría seleccionada"></canvas></div>
+                        <div id="cat-trend-empty" class="hidden py-10 text-center text-xs text-gray-500">Esta categoría no tiene gasto en el periodo seleccionado.</div>
+                    </div>
+
                     <!-- Tabla de gastos por categoría -->
                     <div class="glass-panel p-5 rounded-2xl border border-white/10 space-y-3">
                         <div>
@@ -1415,6 +1436,15 @@
                             </table>
                         </div>
                     </div>
+                    <!-- Préstamos vigentes (se oculta si no hay ninguno) -->
+                    <div id="analysis-loans-panel" class="glass-panel p-5 rounded-2xl border border-white/10 space-y-3 hidden">
+                        <div>
+                            <h3 class="text-sm font-semibold text-white">Préstamos vigentes</h3>
+                            <p class="text-xs text-gray-400">Valoración orientativa de cada préstamo (coste y estructura) y de tu carga total de deuda, con tus ingresos y gastos medios de los últimos 3 meses.</p>
+                        </div>
+                        <div id="analysis-loans-summary" class="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2 text-xs"></div>
+                        <div id="analysis-loans-list" class="divide-y divide-white/5"></div>
+                    </div>
                 </div>
 
                 <!-- ================= TAB 5: SMART ADVISOR & RECOMMENDATIONS ================= -->
@@ -1517,6 +1547,106 @@
                             <!-- Dynamic recommendations cards -->
                         </div>
                     </div>
+                    <!-- Valorar una financiación (plegado por defecto) -->
+                    <details id="loan-valuator" class="glass-panel rounded-2xl border border-white/10 group">
+                        <summary class="p-5 cursor-pointer list-none flex items-center justify-between gap-3">
+                            <span class="flex items-center gap-3">
+                                <span class="w-10 h-10 rounded-xl bg-apple-purple/20 text-apple-purple flex items-center justify-center"><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i></span>
+                                <span>
+                                    <span class="block text-sm font-semibold text-white">Valorar una financiación</span>
+                                    <span class="block text-xs text-gray-400">Comprueba si unas condiciones son buenas antes de firmar, con los datos de la hoja informativa.</span>
+                                </span>
+                            </span>
+                            <i class="fa-solid fa-chevron-down text-xs text-gray-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                        </summary>
+                        <div class="px-5 pb-5 space-y-4 border-t border-white/10 pt-4">
+                            <form id="lv-form" onsubmit="event.preventDefault(); app.runLoanValuation();" class="space-y-4 text-xs">
+                                <fieldset class="space-y-3">
+                                    <legend class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Datos de la oferta (hoja INE o FEIN)</legend>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div><label class="block text-gray-400 mb-1" for="lv-type">Tipo de financiación</label>
+                                            <select id="lv-type" class="w-full px-3 py-2 apple-input rounded-xl text-white">
+                                                <option value="personal">Préstamo personal</option>
+                                                <option value="consumer">Compra financiada</option>
+                                                <option value="car">Vehículo</option>
+                                                <option value="mortgage">Hipoteca</option>
+                                                <option value="credit_card">Tarjeta / crédito</option>
+                                                <option value="student">Estudios</option>
+                                                <option value="other">Otro</option>
+                                            </select></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-capital">Importe a financiar (€) *</label>
+                                            <input type="number" id="lv-capital" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-installments">Número de cuotas mensuales *</label>
+                                            <input type="number" id="lv-installments" min="1" max="600" step="1" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-amount">Importe de la cuota (€) *</label>
+                                            <input type="number" id="lv-amount" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-total">Importe total a devolver (€)</label>
+                                            <input type="number" id="lv-total" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-last">Última cuota, si es distinta (€)</label>
+                                            <input type="number" id="lv-last" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-tin">TIN (%)</label>
+                                            <input type="number" id="lv-tin" min="0" max="100" step="0.001" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-apr">TAE (%)</label>
+                                            <input type="number" id="lv-apr" min="0" max="100" step="0.001" placeholder="Si no la sabes, se calcula" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-fee">Comisión de apertura (€)</label>
+                                            <input type="number" id="lv-fee" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-extra">Seguro u otros gastos por cuota (€)</label>
+                                            <input type="number" id="lv-extra" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-down">Entrada o pago inicial (€)</label>
+                                            <input type="number" id="lv-down" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-early">Comisión por cancelación anticipada (%)</label>
+                                            <input type="number" id="lv-early" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                    </div>
+                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer">
+                                        <input type="checkbox" id="lv-insurance-required" class="mt-0.5">
+                                        <span>Incluye un seguro vinculado obligatorio.</span>
+                                    </label>
+                                </fieldset>
+                                <fieldset class="space-y-2">
+                                    <legend class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Antes de firmar</legend>
+                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-ine" class="mt-0.5"><span id="lv-chk-ine-label">Me han entregado la información normalizada europea (INE).</span></label>
+                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-withdraw" class="mt-0.5"><span>Sé que puedo desistir en el plazo legal.</span></label>
+                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-insopt" class="mt-0.5"><span>Los seguros vinculados son opcionales o no hay ninguno.</span></label>
+                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-auth" class="mt-0.5"><span>He comprobado que la entidad está autorizada por el Banco de España.</span></label>
+                                </fieldset>
+                                <div class="flex justify-end">
+                                    <button type="submit" class="px-4 py-2 rounded-xl bg-apple-blue hover:bg-blue-600 text-white text-xs font-medium transition">Valorar</button>
+                                </div>
+                            </form>
+
+                            <div id="lv-result" class="space-y-4" aria-live="polite"></div>
+
+                            <details class="rounded-xl bg-white/5 border border-white/10">
+                                <summary class="px-4 py-3 cursor-pointer text-xs text-gray-300">Referencias de mercado (editables)</summary>
+                                <div class="px-4 pb-4 space-y-3 text-xs">
+                                    <p class="text-gray-400">TAE media orientativa por tipo de producto con la que se compara tu oferta. Son valores aproximados: actualízalos cuando consultes datos más recientes (Banco de España, INE).</p>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-personal">Préstamo personal</label>
+                                            <input type="number" id="ref-rate-personal" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-consumer">Compra financiada</label>
+                                            <input type="number" id="ref-rate-consumer" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-car">Vehículo</label>
+                                            <input type="number" id="ref-rate-car" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-mortgage">Hipoteca</label>
+                                            <input type="number" id="ref-rate-mortgage" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-credit_card">Tarjeta / crédito</label>
+                                            <input type="number" id="ref-rate-credit_card" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-student">Estudios</label>
+                                            <input type="number" id="ref-rate-student" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-other">Otro</label>
+                                            <input type="number" id="ref-rate-other" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-updated">Fecha de los datos</label>
+                                            <input type="date" id="ref-updated" class="w-full px-3 py-2 apple-input rounded-xl text-white"></div>
+                                    </div>
+                                    <p id="ref-stale-note" class="text-apple-orange"></p>
+                                    <div class="flex flex-wrap justify-end gap-2">
+                                        <button type="button" onclick="app.resetReferenceRates()" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15">Restablecer valores iniciales</button>
+                                        <button type="button" onclick="app.saveReferenceRates()" class="px-3 py-1.5 rounded-lg bg-apple-blue text-white hover:bg-blue-600">Guardar referencias</button>
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
+                    </details>
                 </div>
 
                 <!-- ================= TAB 6: SETTINGS & SECURITY ================= -->
@@ -1852,7 +1982,11 @@
                 });
                 const selectedMonth = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(raw.selectedMonth ?? ''))
                     ? raw.selectedMonth : this.monthKeyFromDate(new Date());
-                return { transactions, categories: categories.length ? categories : this.getEmptyDefaultDB().categories, loans, settings: { currency: '€' }, selectedMonth };
+                const referenceRates = this.sanitizeReferenceRates(raw.settings && raw.settings.referenceRates);
+                return {
+                    transactions, categories: categories.length ? categories : this.getEmptyDefaultDB().categories, loans,
+                    settings: referenceRates ? { currency: '€', referenceRates } : { currency: '€' }, selectedMonth
+                };
             }
 
             // Toast Notifications
@@ -2453,7 +2587,7 @@
                 else if (this.activeTab === 'category-expenses') this.renderCategoryExpensesTab();
                 else if (this.activeTab === 'monthly-summary') this.renderMonthlySummaryTab();
                 else if (this.activeTab === 'analysis') this.renderAnalysisTab();
-                else if (this.activeTab === 'insights') this.renderInsightsTab();
+                else if (this.activeTab === 'insights') { this.renderInsightsTab(); this.renderReferenceRatesEditor(); }
             }
 
             formatCurrency(amount) {
@@ -4019,6 +4153,624 @@
                 await this.saveData();
             }
 
+            // ---------- Valoración de financiaciones ----------
+            // Referencias orientativas de TAE media por tipo (España, 2026): consumo y tarjetas según el Banco de España,
+            // préstamos personales según Asufin e hipotecas según el tipo medio publicado en el BOE. Son editables.
+            getDefaultReferenceRates() {
+                return { updated: '2026-10-01', rates: { personal: 10.1, consumer: 7.2, car: 7.2, mortgage: 3.2, credit_card: 18.3, student: 7.2, other: 10.1 } };
+            }
+
+            sanitizeReferenceRates(raw) {
+                if (!raw || typeof raw !== 'object') return null;
+                const defaults = this.getDefaultReferenceRates();
+                const rates = {};
+                Object.keys(defaults.rates).forEach(type => {
+                    const value = Number(raw.rates && raw.rates[type]);
+                    rates[type] = Number.isFinite(value) && value >= 0 && value <= 100 ? Math.round(value * 100) / 100 : defaults.rates[type];
+                });
+                return { updated: isValidISODate(String(raw.updated ?? '')) ? raw.updated : defaults.updated, rates };
+            }
+
+            getReferenceRates() {
+                return this.sanitizeReferenceRates(this.db.settings && this.db.settings.referenceRates) || this.getDefaultReferenceRates();
+            }
+
+            renderReferenceRatesEditor() {
+                const refs = this.getReferenceRates();
+                Object.entries(refs.rates).forEach(([type, value]) => {
+                    const input = document.getElementById(`ref-rate-${type}`);
+                    if (input) input.value = value;
+                });
+                const dateInput = document.getElementById('ref-updated');
+                if (dateInput) dateInput.value = refs.updated;
+                const note = document.getElementById('ref-stale-note');
+                if (note) {
+                    const [uy, um] = refs.updated.split('-').map(Number);
+                    const now = new Date();
+                    const months = (now.getFullYear() - uy) * 12 + (now.getMonth() + 1 - um);
+                    note.textContent = months >= 6 ? `Estas referencias tienen unos ${months} meses: conviene revisarlas antes de fiarte de la comparación.` : '';
+                }
+                const ineLabel = document.getElementById('lv-chk-ine-label');
+                const typeSelect = document.getElementById('lv-type');
+                if (ineLabel && typeSelect) {
+                    ineLabel.textContent = typeSelect.value === 'mortgage'
+                        ? 'Me han entregado la FEIN con al menos 10 días de antelación.'
+                        : 'Me han entregado la información normalizada europea (INE).';
+                }
+            }
+
+            async saveReferenceRates() {
+                const defaults = this.getDefaultReferenceRates();
+                const rates = {};
+                for (const type of Object.keys(defaults.rates)) {
+                    const input = document.getElementById(`ref-rate-${type}`);
+                    const value = Number(input ? input.value : NaN);
+                    if (!input || input.value === '' || !Number.isFinite(value) || value < 0 || value > 100) {
+                        this.showToast('Revisa las referencias: cada TAE debe estar entre 0 y 100.', 'error');
+                        return;
+                    }
+                    rates[type] = Math.round(value * 100) / 100;
+                }
+                const updated = document.getElementById('ref-updated').value;
+                if (!isValidISODate(updated)) {
+                    this.showToast('Indica la fecha de los datos de referencia.', 'error');
+                    return;
+                }
+                this.db.settings = { ...(this.db.settings || { currency: '€' }), referenceRates: { updated, rates } };
+                this.showToast('Referencias guardadas.', 'success');
+                this.renderAll();
+                await this.saveData();
+            }
+
+            async resetReferenceRates() {
+                if (this.db.settings) delete this.db.settings.referenceRates;
+                this.showToast('Referencias restablecidas a los valores iniciales.', 'info');
+                this.renderAll();
+                await this.saveData();
+            }
+
+            // TAE a partir de los flujos: se recibe el capital menos la comisión de apertura y se pagan las cuotas.
+            computeAPR({ capital, fee = 0, payments, periodsPerYear = 12 }) {
+                const net = capital - fee;
+                if (!(capital > 0) || !(net > 0) || !payments.length) return null;
+                const totalPaid = payments.reduce((acc, payment) => acc + payment, 0);
+                if (totalPaid <= net) return 0;
+                const npv = rate => payments.reduce((acc, payment, index) => acc + payment / Math.pow(1 + rate, index + 1), 0) - net;
+                let low = 0;
+                let high = 1;
+                while (npv(high) > 0 && high < 1024) high *= 2;
+                for (let i = 0; i < 100; i++) {
+                    const mid = (low + high) / 2;
+                    if (npv(mid) > 0) low = mid; else high = mid;
+                }
+                return (Math.pow(1 + (low + high) / 2, periodsPerYear) - 1) * 100;
+            }
+
+            // Tipo periódico implícito de una cuota constante (para simular alternativas con el mismo tipo).
+            impliedPeriodicRate(principal, payment, installments) {
+                if (!(principal > 0) || !(payment > 0) || installments < 1) return null;
+                if (payment * installments <= principal) return 0;
+                const presentValue = rate => payment * (1 - Math.pow(1 + rate, -installments)) / rate;
+                let low = 1e-9;
+                let high = 1;
+                while (presentValue(high) > principal && high < 1024) high *= 2;
+                for (let i = 0; i < 100; i++) {
+                    const mid = (low + high) / 2;
+                    if (presentValue(mid) > principal) low = mid; else high = mid;
+                }
+                return (low + high) / 2;
+            }
+
+            annuityPayment(principal, rate, installments) {
+                if (installments < 1) return 0;
+                if (rate <= 0) return principal / installments;
+                return principal * rate / (1 - Math.pow(1 + rate, -installments));
+            }
+
+            // Ingresos, gastos y deuda actuales: media de los últimos 3 meses cerrados con datos propios.
+            getFinanceSnapshot() {
+                const now = new Date();
+                const currentKey = this.monthKeyFromDate(now);
+                const hasOwnData = key => this.db.transactions.some(tx => typeof tx.date === 'string' && tx.date.startsWith(key));
+                const closedKeys = [1, 2, 3].map(offset => this.monthKeyFromDate(new Date(now.getFullYear(), now.getMonth() - offset, 1))).filter(hasOwnData);
+                const keys = closedKeys.length ? closedKeys : (hasOwnData(currentKey) ? [currentKey] : []);
+                let income = 0;
+                let expense = 0;
+                keys.forEach(key => {
+                    this.getTransactionsForMonth(key).forEach(tx => {
+                        if (tx.loanId && tx.installment === 0) return; // entradas y liquidaciones puntuales no son gasto habitual
+                        if (tx.type === 'income') income += Number(tx.amount) || 0;
+                        else if (tx.type === 'expense') expense += Number(tx.amount) || 0;
+                    });
+                });
+                const count = keys.length || 1;
+                const balance = this.getBalanceTransactions().reduce((acc, tx) =>
+                    acc + (tx.type === 'income' ? 1 : tx.type === 'expense' ? -1 : 0) * (Number(tx.amount) || 0), 0);
+                const debtMonthly = this.getLoanSeries(now).reduce((acc, item) => acc + item.monthlyAmount, 0);
+                return { income: income / count, expense: expense / count, balance, hasData: this.db.transactions.length > 0, debtMonthly, months: keys.length };
+            }
+
+            // Capacidad de pago: cuotas sobre ingresos, margen mensual y colchón de ahorro.
+            buildCapacityIndicators(finance) {
+                const fmt = value => this.formatCurrency(value);
+                const percent = value => `${value.toFixed(1)}%`;
+                const isNew = finance.mode === 'new';
+                const indicators = [];
+                if (finance.income > 0) {
+                    const ratio = (finance.debtAfter / finance.income) * 100;
+                    indicators.push({
+                        id: 'ratio', label: 'Cuotas sobre ingresos', status: ratio <= 30 ? 'ok' : ratio <= 35 ? 'warn' : 'bad',
+                        short: `Esfuerzo ${ratio.toFixed(0)}%`,
+                        message: `${isNew ? 'Con esta deuda, tus cuotas de préstamos sumarían' : 'Tus cuotas de préstamos suman'} ${fmt(finance.debtAfter)} al mes, el ${percent(ratio)} de tus ingresos medios (${fmt(finance.income)}). Referencia orientativa: máximo 35%.`
+                    });
+                    const margin = finance.income - finance.expenseAfter;
+                    const marginPct = (margin / finance.income) * 100;
+                    indicators.push({
+                        id: 'margin', label: 'Margen mensual', status: marginPct >= 10 ? 'ok' : marginPct >= 0 ? 'warn' : 'bad',
+                        short: `Margen ${fmt(margin)}`,
+                        message: margin >= 0
+                            ? `${isNew ? 'Tras la cuota' : 'Tras pagar tus gastos y cuotas'} te quedaría un margen de ${fmt(margin)} al mes (${percent(marginPct)} de tus ingresos).`
+                            : `${isNew ? 'Con esta cuota' : 'Con tus gastos actuales'} gastarías ${fmt(-margin)} más de lo que ingresas cada mes.`
+                    });
+                } else {
+                    indicators.push({ id: 'ratio', label: 'Cuotas sobre ingresos', status: 'na', short: 'Sin ingresos', message: 'No hay ingresos registrados para calcular el esfuerzo.' });
+                    indicators.push({ id: 'margin', label: 'Margen mensual', status: 'na', short: 'Sin ingresos', message: 'No hay ingresos registrados para calcular el margen.' });
+                }
+                if (finance.hasBalance && finance.expenseAfter > 0) {
+                    const months = Math.max(0, finance.cashAfter) / finance.expenseAfter;
+                    indicators.push({
+                        id: 'cushion', label: 'Colchón de ahorro', status: months >= 3 ? 'ok' : months >= 1 ? 'warn' : 'bad',
+                        short: `Colchón ${months.toFixed(1)} meses`,
+                        message: finance.cashAfter <= 0
+                            ? `${isNew ? 'Tras la entrada y la comisión' : 'Ahora'} no te quedarían ahorros para cubrir gastos.`
+                            : `${isNew ? 'Tras la entrada y la comisión, tus' : 'Tus'} ahorros cubrirían unos ${months.toFixed(1)} meses de gastos. Referencia: 3 o más.`
+                    });
+                } else {
+                    indicators.push({ id: 'cushion', label: 'Colchón de ahorro', status: 'na', short: 'Sin datos', message: 'No hay datos suficientes para calcular tu colchón de ahorro.' });
+                }
+                return indicators;
+            }
+
+            // Valoración de una financiación (nueva o registrada). Devuelve puntuación, bloques e indicadores.
+            // Es una guía orientativa con umbrales habituales, no asesoramiento financiero.
+            evaluateFinancing(input, finance, { skip = [] } = {}) {
+                const fmt = value => this.formatCurrency(value);
+                const percent = value => `${value.toFixed(1)}%`;
+                const types = this.getLoanTypes();
+                const typeLabel = (types[input.type] || types.other).label.toLowerCase();
+                const refApr = this.getReferenceRates().rates[input.type] ?? this.getReferenceRates().rates.other;
+                const step = Number(input.frequency) || 1;
+                const count = input.installments;
+                const extra = Number(input.extraPerInstallment) || 0;
+                const lastBase = input.lastInstallmentAmount > 0 ? input.lastInstallmentAmount : input.installmentAmount;
+                const payments = Array.from({ length: count }, (_, index) => (index === count - 1 ? lastBase : input.installmentAmount) + extra);
+                const totalInstallments = payments.reduce((acc, payment) => acc + payment, 0);
+                const fee = Number(input.openingFee) || 0;
+                const down = Number(input.downPayment) || 0;
+                const computedApr = this.computeAPR({ capital: input.capital, fee, payments, periodsPerYear: 12 / step });
+                const declaredApr = input.apr > 0 ? input.apr : null;
+                const apr = declaredApr !== null ? declaredApr : computedApr;
+                const aprSource = declaredApr !== null ? 'declared' : (computedApr !== null ? 'computed' : null);
+                const interest = input.capital > 0 ? Math.max(0, totalInstallments - extra * count - input.capital) : null;
+                const monthly = (input.installmentAmount + extra) / step;
+                const years = (count * step) / 12;
+                const na = (id, label, message) => ({ id, label, status: 'na', message });
+
+                // --- Coste ---
+                let aprRatio = null;
+                let aprIndicator;
+                if (apr === null) {
+                    aprIndicator = na('apr', 'TAE frente a la media', 'Indica el importe a financiar o la TAE para poder compararla con la media.');
+                } else {
+                    aprRatio = refApr > 0 ? apr / refApr : 1;
+                    let message = `TAE ${percent(apr)}${aprSource === 'computed' ? ' (calculada con tus datos)' : ''} frente a una media orientativa del ${percent(refApr)} para ${typeLabel}. `;
+                    message += aprRatio >= 2 ? 'Es muy superior a la media: compara otras ofertas y consulta si podría considerarse abusivo.'
+                        : aprRatio > 1.3 ? 'Está claramente por encima de la media.'
+                        : aprRatio > 1 ? 'Algo por encima de la media.' : 'En línea con la media o por debajo.';
+                    if (declaredApr !== null && computedApr !== null && computedApr - declaredApr > 1) {
+                        message += ` Ojo: con las cuotas y comisiones indicadas, la TAE sale ${percent(computedApr)}, superior a la declarada; revisa los datos.`;
+                    }
+                    if (input.tin > 0 && !(input.lastInstallmentAmount > 0 && Math.abs(input.lastInstallmentAmount - input.installmentAmount) > input.installmentAmount * 0.01)) {
+                        const periodic = this.impliedPeriodicRate(input.capital, input.installmentAmount, count);
+                        if (periodic !== null) {
+                            const impliedNominal = periodic * (12 / step) * 100;
+                            if (Math.abs(impliedNominal - input.tin) > 1) {
+                                message += ` Ojo: con ese importe, número de cuotas y cuota, el tipo implícito es ${percent(impliedNominal)}, distinto del TIN indicado (${percent(input.tin)}); revisa los datos.`;
+                            }
+                        }
+                    }
+                    aprIndicator = { id: 'apr', label: 'TAE frente a la media', status: aprRatio <= 1 ? 'ok' : aprRatio <= 1.3 ? 'warn' : 'bad', message };
+                }
+                let feesIndicator;
+                if (!(input.capital > 0)) {
+                    feesIndicator = na('fees', 'Comisiones y seguros', 'Indica el importe a financiar para valorar las comisiones.');
+                } else {
+                    const feePct = (fee / input.capital) * 100;
+                    let status = feePct <= 1 ? 'ok' : feePct <= 3 ? 'warn' : 'bad';
+                    let message = fee > 0 ? `Comisión de apertura de ${fmt(fee)} (${percent(feePct)} del importe).` : 'Sin comisión de apertura.';
+                    if (input.insuranceRequired === true) {
+                        if (status === 'ok') status = 'warn';
+                        message += ' Hay un seguro vinculado obligatorio: comprueba que su coste está incluido en la TAE y compáralo con uno contratado por tu cuenta.';
+                    }
+                    feesIndicator = { id: 'fees', label: 'Comisiones y seguros', status, message };
+                }
+                let earlyIndicator;
+                if (input.earlyFeePct === null || input.earlyFeePct === undefined) {
+                    earlyIndicator = na('early', 'Cancelación anticipada', 'No se ha indicado la comisión por cancelación anticipada.');
+                } else if (input.type === 'mortgage') {
+                    earlyIndicator = {
+                        id: 'early', label: 'Cancelación anticipada', status: input.earlyFeePct <= 0.5 ? 'ok' : input.earlyFeePct <= 2 ? 'warn' : 'bad',
+                        message: `Comisión por cancelación anticipada del ${percent(input.earlyFeePct)}. En hipotecas el máximo depende de si el tipo es fijo o variable: compruébalo en tu FEIN.`
+                    };
+                } else {
+                    earlyIndicator = {
+                        id: 'early', label: 'Cancelación anticipada', status: input.earlyFeePct <= 1 ? 'ok' : 'bad',
+                        message: `Comisión por cancelación anticipada del ${percent(input.earlyFeePct)}. Orientación: en crédito al consumo el máximo legal habitual es el 1% (0,5% si queda menos de un año); verifícalo en tu contrato.`
+                    };
+                }
+
+                // --- Estructura ---
+                const termLimits = { personal: [5, 7], consumer: [3, 5], car: [6, 8], mortgage: [30, 35], student: [10, 15], other: [5, 8] };
+                let termIndicator;
+                if (input.type === 'credit_card' || !termLimits[input.type]) {
+                    termIndicator = na('term', 'Plazo', 'El plazo no se valora en tarjetas o créditos renovables.');
+                } else {
+                    const [okLimit, warnLimit] = termLimits[input.type];
+                    termIndicator = {
+                        id: 'term', label: 'Plazo', status: years <= okLimit ? 'ok' : years <= warnLimit ? 'warn' : 'bad',
+                        message: `Plazo de ${years.toFixed(1)} años para ${typeLabel}; lo habitual es hasta ${okLimit}. Cuanto más largo, más intereses pagas.`
+                    };
+                }
+                let downIndicator;
+                if (!['mortgage', 'car', 'consumer'].includes(input.type) || !(input.capital > 0)) {
+                    downIndicator = na('down', 'Entrada', 'La entrada se valora en hipotecas, vehículos y compras financiadas.');
+                } else {
+                    const price = input.capital + down;
+                    const downPct = (down / price) * 100;
+                    const status = input.type === 'mortgage' ? (downPct >= 20 ? 'ok' : downPct >= 10 ? 'warn' : 'bad') : (downPct >= 15 ? 'ok' : 'warn');
+                    downIndicator = {
+                        id: 'down', label: 'Entrada', status,
+                        message: `Entrada del ${percent(downPct)} del precio (${fmt(down)} de ${fmt(price)}).${input.type === 'mortgage' ? ' Los bancos suelen financiar hasta el 80% del valor.' : ' Una entrada mayor reduce la cuota y los intereses.'}`
+                    };
+                }
+                let balloonIndicator;
+                if (input.lastInstallmentAmount > 0 && input.installmentAmount > 0 && input.lastInstallmentAmount > 2 * input.installmentAmount) {
+                    const times = input.lastInstallmentAmount / input.installmentAmount;
+                    balloonIndicator = {
+                        id: 'balloon', label: 'Cuota final', status: times <= 5 ? 'warn' : 'bad',
+                        message: `La última cuota (${fmt(input.lastInstallmentAmount)}) es ${times.toFixed(1)} veces la normal: al final tendrás que pagarla de golpe o refinanciar.`
+                    };
+                } else {
+                    balloonIndicator = { id: 'balloon', label: 'Cuota final', status: 'ok', message: 'Cuotas regulares, sin cuota final elevada.' };
+                }
+
+                // --- Condiciones (lista de comprobación) ---
+                let docsIndicators = [];
+                if (input.checklist) {
+                    const items = [
+                        ['ine', input.type === 'mortgage' ? 'FEIN entregada con 10 días de antelación' : 'Información normalizada europea entregada'],
+                        ['withdraw', 'Conocer el derecho de desistimiento'],
+                        ['insuranceOptional', 'Seguros vinculados opcionales'],
+                        ['authorized', 'Entidad autorizada por el Banco de España']
+                    ];
+                    const missing = items.filter(([key]) => !input.checklist[key]).map(([, label]) => label);
+                    const confirmed = items.length - missing.length;
+                    docsIndicators = [{
+                        id: 'docs', label: 'Documentación y condiciones', status: confirmed === items.length ? 'ok' : confirmed >= 2 ? 'warn' : 'bad',
+                        message: missing.length ? `Sin confirmar: ${missing.join('; ')}.` : 'Documentación y condiciones confirmadas.'
+                    }];
+                }
+
+                const capacityIndicators = this.buildCapacityIndicators(finance);
+                const blocks = [
+                    { id: 'cost', name: 'Coste', weight: 0.35, indicators: [aprIndicator, feesIndicator, earlyIndicator] },
+                    { id: 'capacity', name: 'Capacidad de pago', weight: 0.35, indicators: capacityIndicators },
+                    { id: 'structure', name: 'Estructura', weight: 0.15, indicators: [termIndicator, downIndicator, balloonIndicator] },
+                    { id: 'conditions', name: 'Condiciones', weight: 0.15, indicators: docsIndicators }
+                ].filter(block => !skip.includes(block.id));
+
+                const points = { ok: 100, warn: 55, bad: 15 };
+                blocks.forEach(block => {
+                    const scored = block.indicators.filter(indicator => indicator.status !== 'na');
+                    block.score = scored.length ? scored.reduce((acc, indicator) => acc + points[indicator.status], 0) / scored.length : null;
+                    block.status = block.score === null ? 'na' : block.score >= 75 ? 'ok' : block.score >= 45 ? 'warn' : 'bad';
+                });
+                const scoredBlocks = blocks.filter(block => block.score !== null);
+                let score = null;
+                if (scoredBlocks.length) {
+                    const weightSum = scoredBlocks.reduce((acc, block) => acc + block.weight, 0);
+                    score = scoredBlocks.reduce((acc, block) => acc + block.score * block.weight, 0) / weightSum;
+                    const ratioIndicator = capacityIndicators.find(indicator => indicator.id === 'ratio');
+                    if (!skip.includes('capacity') && ratioIndicator && ratioIndicator.status === 'bad') score = Math.min(score, 55);
+                    if (aprRatio !== null && aprRatio >= 2) score = Math.min(score, 45);
+                    score = Math.round(score);
+                    // Sin ningún dato de coste (TAE o importe financiado) no tiene sentido puntuar la financiación.
+                    const costBlock = blocks.find(block => block.id === 'cost');
+                    if (costBlock && costBlock.score === null) score = null;
+                }
+                const status = score === null ? 'na' : score >= 75 ? 'ok' : score >= 50 ? 'warn' : 'bad';
+                const all = blocks.flatMap(block => block.indicators).filter(indicator => indicator.status === 'bad' || indicator.status === 'warn');
+                all.sort((a, b) => (a.status === 'bad' ? 0 : 1) - (b.status === 'bad' ? 0 : 1));
+                return {
+                    score, status, blocks, reasons: all.slice(0, 3),
+                    numbers: {
+                        apr, aprSource, refApr, computedApr, monthly, interest, years, typeLabel,
+                        totalInstallments, totalPaid: totalInstallments + fee + down
+                    }
+                };
+            }
+
+            valuationChipClass(status) {
+                return {
+                    ok: 'bg-apple-green/20 text-apple-green', warn: 'bg-apple-orange/20 text-apple-orange',
+                    bad: 'bg-apple-red/20 text-apple-red', na: 'bg-white/10 text-gray-400'
+                }[status] || 'bg-white/10 text-gray-400';
+            }
+
+            valuationStatusLabel(status) {
+                return { ok: 'Correcto', warn: 'A revisar', bad: 'Preocupante', na: 'Sin datos' }[status] || 'Sin datos';
+            }
+
+            // ---------- Panel de Análisis: préstamos vigentes ----------
+            renderLoanAnalysisPanel() {
+                const panel = document.getElementById('analysis-loans-panel');
+                if (!panel) return;
+                const todayISO = this.localDateInputValue();
+                const active = (this.db.loans || [])
+                    .map(loan => ({ loan, stats: this.getLoanStats(loan, todayISO) }))
+                    .filter(entry => entry.stats.status === 'active' || entry.stats.status === 'upcoming');
+                panel.classList.toggle('hidden', active.length === 0);
+                if (!active.length) return;
+
+                const fmt = value => this.formatCurrency(value);
+                const snapshot = this.getFinanceSnapshot();
+                const refs = this.getReferenceRates();
+                const types = this.getLoanTypes();
+                const chip = (status, text) => `<span class="px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap ${this.valuationChipClass(status)}">${escapeHTML(text)}</span>`;
+
+                const capacity = this.buildCapacityIndicators({
+                    mode: 'registered', income: snapshot.income, debtAfter: snapshot.debtMonthly,
+                    expenseAfter: snapshot.expense, cashAfter: snapshot.balance, hasBalance: snapshot.hasData
+                });
+                const ratioIndicator = capacity.find(indicator => indicator.id === 'ratio');
+                const summary = document.getElementById('analysis-loans-summary');
+                if (summary) {
+                    summary.innerHTML = `
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div><span class="text-gray-400">Carga total de deuda este mes:</span> <span class="text-white font-semibold">${fmt(snapshot.debtMonthly)}</span>${snapshot.income > 0 ? ` <span class="text-gray-400">· ${(snapshot.debtMonthly / snapshot.income * 100).toFixed(0)}% de tus ingresos</span>` : ''}</div>
+                            <div class="flex flex-wrap gap-1.5">${capacity.map(indicator => chip(indicator.status, indicator.short)).join('')}</div>
+                        </div>
+                        ${ratioIndicator && ratioIndicator.status !== 'ok' && ratioIndicator.status !== 'na' ? `<div class="text-[11px] text-gray-400">${escapeHTML(ratioIndicator.message)}</div>` : ''}`;
+                }
+
+                const list = document.getElementById('analysis-loans-list');
+                if (!list) return;
+                list.innerHTML = '';
+                active.forEach(({ loan, stats }) => {
+                    const evaluation = this.evaluateFinancing({
+                        type: loan.type, capital: loan.principal, installments: loan.installments,
+                        installmentAmount: loan.installmentAmount, lastInstallmentAmount: loan.lastInstallmentAmount,
+                        extraPerInstallment: loan.extraPerInstallment, apr: loan.apr, openingFee: loan.openingFee,
+                        downPayment: loan.downPayment, frequency: loan.frequency, earlyFeePct: null, insuranceRequired: null, checklist: null
+                    }, {
+                        mode: 'registered', income: snapshot.income, debtAfter: snapshot.debtMonthly,
+                        expenseAfter: snapshot.expense, cashAfter: snapshot.balance, hasBalance: snapshot.hasData
+                    }, { skip: ['capacity', 'conditions'] });
+                    const monthly = (loan.installmentAmount + (Number(loan.extraPerInstallment) || 0)) / (Number(loan.frequency) || 1);
+                    const aprText = evaluation.numbers.apr !== null
+                        ? `TAE ${evaluation.numbers.apr.toFixed(1)}%${evaluation.numbers.aprSource === 'computed' ? ' (calculada)' : ''} · media ${evaluation.numbers.refApr}%`
+                        : 'TAE sin datos';
+                    const shareText = snapshot.income > 0 ? `Cuota ${fmt(monthly)} · ${(monthly / snapshot.income * 100).toFixed(0)}% de tus ingresos` : `Cuota ${fmt(monthly)}`;
+                    const termText = stats.status === 'upcoming'
+                        ? `Empieza el ${formatDateDisplay(loan.firstPaymentDate)}`
+                        : `Quedan ${stats.remaining.length} ${stats.remaining.length === 1 ? 'cuota' : 'cuotas'} (hasta ${this.monthLabelLong(stats.lastDate.slice(0, 7))})`;
+                    const verdicts = { ok: 'Buenas condiciones', warn: 'Mejorables', bad: 'Poco favorables' };
+                    const chipHtml = evaluation.score === null ? chip('na', 'Sin datos') : chip(evaluation.status, `${evaluation.score} · ${verdicts[evaluation.status]}`);
+                    const reason = evaluation.score === null
+                        ? 'Añade el capital y la TAE del préstamo para poder valorarlo.'
+                        : (evaluation.status !== 'ok' && evaluation.reasons.length ? evaluation.reasons[0].message : '');
+                    const row = document.createElement('div');
+                    row.className = 'py-3 flex flex-wrap items-start justify-between gap-3';
+                    row.innerHTML = `
+                        <div class="min-w-0 space-y-0.5">
+                            <div class="text-xs font-medium text-white truncate">${escapeHTML(loan.name)} <span class="text-gray-500 font-normal">· ${escapeHTML((types[loan.type] || types.other).label)}</span></div>
+                            <div class="text-[11px] text-gray-400">${escapeHTML(aprText)} · ${escapeHTML(shareText)} · ${escapeHTML(termText)}</div>
+                            ${reason ? `<div class="text-[11px] text-gray-500">${escapeHTML(reason)}</div>` : ''}
+                        </div>
+                        ${chipHtml}
+                    `;
+                    list.appendChild(row);
+                });
+            }
+
+            // ---------- Asistente: valorar una financiación y simular alternativas ----------
+            runLoanValuation() {
+                const read = id => document.getElementById(id);
+                const number = id => { const raw = read(id).value; return raw === '' ? 0 : Number(raw); };
+                const installments = Math.floor(number('lv-installments'));
+                const capital = number('lv-capital');
+                const resolved = this.resolveLoanAmounts(installments, number('lv-amount'), number('lv-total'), number('lv-last'));
+                if (!(capital > 0) || installments < 1 || installments > 600 || !(resolved.installmentAmount > 0)) {
+                    this.showToast('Indica el importe a financiar, el número de cuotas y la cuota (o el total a devolver).', 'error');
+                    return;
+                }
+                const earlyRaw = read('lv-early').value;
+                const input = {
+                    type: read('lv-type').value, capital, installments,
+                    installmentAmount: resolved.installmentAmount, lastInstallmentAmount: resolved.lastInstallmentAmount,
+                    extraPerInstallment: number('lv-extra'), apr: number('lv-apr'), tin: number('lv-tin'),
+                    openingFee: number('lv-fee'), downPayment: number('lv-down'), frequency: 1,
+                    earlyFeePct: earlyRaw === '' ? null : Number(earlyRaw),
+                    insuranceRequired: read('lv-insurance-required').checked ? true : null,
+                    checklist: {
+                        ine: read('lv-chk-ine').checked, withdraw: read('lv-chk-withdraw').checked,
+                        insuranceOptional: read('lv-chk-insopt').checked, authorized: read('lv-chk-auth').checked
+                    }
+                };
+                const snapshot = this.getFinanceSnapshot();
+                const evaluation = this.evaluateFinancing(input, this.buildNewLoanFinance(input, snapshot));
+                this._lastValuation = { input, snapshot, evaluation, note: resolved.note };
+                this.renderValuationResult();
+            }
+
+            buildNewLoanFinance(input, snapshot) {
+                const monthly = (input.installmentAmount + (Number(input.extraPerInstallment) || 0)) / (Number(input.frequency) || 1);
+                return {
+                    mode: 'new', income: snapshot.income, debtAfter: snapshot.debtMonthly + monthly,
+                    expenseAfter: snapshot.expense + monthly,
+                    cashAfter: snapshot.balance - (Number(input.downPayment) || 0) - (Number(input.openingFee) || 0),
+                    hasBalance: snapshot.hasData
+                };
+            }
+
+            renderValuationResult() {
+                const box = document.getElementById('lv-result');
+                const last = this._lastValuation;
+                if (!box || !last) return;
+                const { input, snapshot, evaluation, note } = last;
+                const fmt = value => this.formatCurrency(value);
+                const chip = (status, text) => `<span class="px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap ${this.valuationChipClass(status)}">${escapeHTML(text)}</span>`;
+                const tone = { ok: 'text-apple-green', warn: 'text-apple-orange', bad: 'text-apple-red', na: 'text-gray-400' }[evaluation.status];
+                const verdicts = { ok: 'Buena opción', warn: 'Aceptable, con puntos a revisar', bad: 'Poco recomendable con estas condiciones' };
+                const numbers = evaluation.numbers;
+                const facts = [];
+                if (numbers.apr !== null) facts.push(`TAE ${numbers.apr.toFixed(2)}%${numbers.aprSource === 'computed' ? ' (calculada)' : ''} · media ${numbers.refApr}%`);
+                facts.push(`Cuota ${fmt(numbers.monthly)} al mes`);
+                if (numbers.interest !== null) facts.push(`Intereses ${fmt(numbers.interest)}`);
+                facts.push(`Total a pagar con entrada y comisión ${fmt(numbers.totalPaid)}`);
+
+                const blocksHtml = evaluation.blocks.map(block => {
+                    const flagged = block.indicators.filter(indicator => indicator.status === 'bad' || indicator.status === 'warn');
+                    const summary = flagged.length ? flagged[0].message
+                        : (block.score === null ? 'Sin datos suficientes.' : 'Todo dentro de lo habitual.');
+                    return `<div class="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1">
+                        <div class="flex items-center justify-between gap-2"><span class="text-xs font-semibold text-white">${escapeHTML(block.name)}</span>${chip(block.status, this.valuationStatusLabel(block.status))}</div>
+                        <div class="text-[11px] text-gray-400">${escapeHTML(summary)}</div>
+                    </div>`;
+                }).join('');
+                const detailHtml = evaluation.blocks.map(block => `
+                    <div class="space-y-1"><div class="text-[11px] uppercase tracking-wider text-gray-500">${escapeHTML(block.name)}</div>
+                    ${block.indicators.map(indicator => `<div class="flex items-start justify-between gap-2"><span class="text-gray-300"><span class="text-white">${escapeHTML(indicator.label)}:</span> ${escapeHTML(indicator.message)}</span>${chip(indicator.status, this.valuationStatusLabel(indicator.status))}</div>`).join('')}</div>`).join('');
+                const conclusion = evaluation.reasons.length
+                    ? `Lo que más conviene revisar: ${evaluation.reasons.map(reason => reason.message).join(' ')}`
+                    : 'No se detectan puntos débiles con los datos indicados.';
+
+                box.innerHTML = `
+                    <div class="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-4">
+                        <div class="flex flex-wrap items-center gap-4">
+                            <div class="text-4xl font-bold ${tone}">${evaluation.score === null ? '—' : evaluation.score}<span class="text-base font-normal text-gray-400">/100</span></div>
+                            <div class="min-w-0">
+                                <div class="text-sm font-semibold text-white">${escapeHTML(verdicts[evaluation.status] || 'Sin datos suficientes')}</div>
+                                <div class="text-[11px] text-gray-400">${facts.map(escapeHTML).join(' · ')}</div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${blocksHtml}</div>
+                        <p class="text-xs text-gray-300">${escapeHTML(conclusion)}</p>
+                        ${note ? `<p class="text-[11px] text-apple-blue">${escapeHTML(note)}</p>` : ''}
+                        <details class="text-xs"><summary class="cursor-pointer text-gray-400">Ver detalle de cada indicador</summary><div class="mt-2 space-y-3">${detailHtml}</div></details>
+                        <p class="text-[11px] text-gray-500">Guía orientativa con umbrales habituales y referencias aproximadas. No es asesoramiento financiero: compara siempre varias ofertas y lee el contrato.</p>
+                    </div>
+
+                    <div class="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3 text-xs">
+                        <h4 class="text-xs font-semibold text-white">Probar alternativas</h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div><label class="block text-gray-400 mb-1" for="lv-sim-down">Entrada adicional (€)</label>
+                                <input type="number" id="lv-sim-down" min="0" step="0.01" value="0" oninput="app.updateLoanSimulation()" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                            <div><label class="block text-gray-400 mb-1" for="lv-sim-n">Número de cuotas</label>
+                                <input type="number" id="lv-sim-n" min="1" max="600" step="1" value="${input.installments}" oninput="app.updateLoanSimulation()" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" onclick="app.applySimulationPreset('shorter')" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15">12 cuotas menos</button>
+                            <button type="button" onclick="app.applySimulationPreset('down')" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15">+10% de entrada</button>
+                            <button type="button" onclick="app.applySimulationPreset('reset')" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15">Restablecer</button>
+                        </div>
+                        <div id="lv-sim-result"></div>
+                    </div>
+                `;
+                this.updateLoanSimulation();
+            }
+
+            applySimulationPreset(kind) {
+                const last = this._lastValuation;
+                if (!last) return;
+                const downInput = document.getElementById('lv-sim-down');
+                const countInput = document.getElementById('lv-sim-n');
+                if (kind === 'shorter') {
+                    countInput.value = String(Math.max(1, last.input.installments - 12));
+                    downInput.value = '0';
+                } else if (kind === 'down') {
+                    downInput.value = String(Math.round((last.input.capital + last.input.downPayment) * 0.10));
+                    countInput.value = String(last.input.installments);
+                } else {
+                    downInput.value = '0';
+                    countInput.value = String(last.input.installments);
+                }
+                this.updateLoanSimulation();
+            }
+
+            // Simulador: mismo tipo de interés, otra entrada y/u otro plazo. La TAE se recalcula con las comisiones.
+            updateLoanSimulation() {
+                const box = document.getElementById('lv-sim-result');
+                const last = this._lastValuation;
+                if (!box || !last) return;
+                const { input, snapshot } = last;
+                const fmt = value => this.formatCurrency(value);
+                const message = (text, tone = 'text-gray-400') => { box.innerHTML = `<div class="${tone}">${escapeHTML(text)}</div>`; };
+                const extraDown = Math.max(0, Number(document.getElementById('lv-sim-down').value) || 0);
+                const altCount = Math.floor(Number(document.getElementById('lv-sim-n').value) || 0);
+                if (input.lastInstallmentAmount > 0 && Math.abs(input.lastInstallmentAmount - input.installmentAmount) > input.installmentAmount * 0.01) {
+                    return message('El simulador no admite una última cuota distinta a las demás. Quita ese dato para simular alternativas.');
+                }
+                if (altCount < 1 || altCount > 600) return message('Indica un número de cuotas entre 1 y 600.', 'text-apple-orange');
+                if (extraDown >= input.capital) return message('La entrada adicional debe ser menor que el importe a financiar.', 'text-apple-orange');
+                const rate = this.impliedPeriodicRate(input.capital, input.installmentAmount, input.installments);
+                if (rate === null) return message('Para simular necesito el importe a financiar, el número de cuotas y la cuota.');
+
+                const scenario = (capital, count, down, payment) => {
+                    const adjusted = {
+                        ...input, capital, installments: count, installmentAmount: payment,
+                        lastInstallmentAmount: 0, apr: 0, downPayment: down
+                    };
+                    const evaluation = this.evaluateFinancing(adjusted, this.buildNewLoanFinance(adjusted, snapshot));
+                    const ratio = snapshot.income > 0 ? ((snapshot.debtMonthly + evaluation.numbers.monthly) / snapshot.income) * 100 : null;
+                    return { evaluation, ratio, count, down };
+                };
+                const base = scenario(input.capital, input.installments, input.downPayment, input.installmentAmount);
+                const altCapital = input.capital - extraDown;
+                const altPayment = Math.round(this.annuityPayment(altCapital, rate, altCount) * 100) / 100;
+                const alt = scenario(altCapital, altCount, input.downPayment + extraDown, altPayment);
+
+                const asCount = value => String(Math.round(value));
+                const asPercent = value => `${value.toFixed(1)}%`;
+                const asPoints = value => `${value.toFixed(1)} pp`;
+                // [etiqueta, antes, después, formato, formato de la diferencia, ¿menos es mejor? (null = neutro)]
+                const rows = [
+                    ['Cuota mensual', base.evaluation.numbers.monthly, alt.evaluation.numbers.monthly, fmt, fmt, true],
+                    ['Número de cuotas', base.count, alt.count, asCount, asCount, null],
+                    ['Intereses totales', base.evaluation.numbers.interest, alt.evaluation.numbers.interest, fmt, fmt, true],
+                    ['Total pagado (con entrada y comisión)', base.evaluation.numbers.totalPaid, alt.evaluation.numbers.totalPaid, fmt, fmt, true],
+                    ['Cuotas sobre tus ingresos', base.ratio, alt.ratio, asPercent, asPoints, true],
+                    ['Puntuación', base.evaluation.score, alt.evaluation.score, asCount, asCount, false]
+                ];
+                const diffCell = (before, after, diffFormat, lowerIsBetter) => {
+                    if (before === null || after === null || lowerIsBetter === null) return '<span class="text-gray-500">—</span>';
+                    const diff = after - before;
+                    if (Math.abs(diff) < 0.005) return '<span class="text-gray-500">=</span>';
+                    const good = lowerIsBetter ? diff < 0 : diff > 0;
+                    return `<span class="${good ? 'text-apple-green' : 'text-apple-orange'}">${diff > 0 ? '+' : '−'}${escapeHTML(diffFormat(Math.abs(diff)))}</span>`;
+                };
+                box.innerHTML = `
+                    <div class="overflow-x-auto"><table class="w-full text-left text-xs">
+                        <thead class="text-gray-400 uppercase text-[10px]"><tr><th class="py-2 pr-3">&nbsp;</th><th class="py-2 px-3 text-right">Tu oferta</th><th class="py-2 px-3 text-right">Alternativa</th><th class="py-2 pl-3 text-right">Diferencia</th></tr></thead>
+                        <tbody class="divide-y divide-white/5">${rows.map(([label, before, after, format, diffFormat, lowerIsBetter]) => `
+                            <tr><td class="py-2 pr-3 text-gray-300">${escapeHTML(label)}</td>
+                            <td class="py-2 px-3 text-right font-mono text-white">${before === null ? '—' : escapeHTML(format(before))}</td>
+                            <td class="py-2 px-3 text-right font-mono text-white">${after === null ? '—' : escapeHTML(format(after))}</td>
+                            <td class="py-2 pl-3 text-right font-mono">${diffCell(before, after, diffFormat, lowerIsBetter)}</td></tr>`).join('')}
+                        </tbody></table></div>
+                    <p class="text-[11px] text-gray-500 mt-2">Se mantiene el mismo tipo de interés implícito de la oferta; la entrada adicional reduce el importe financiado. La TAE de ambas columnas se calcula con tus datos, así que la puntuación puede diferir de la anterior. Resultados orientativos.</p>`;
+            }
+
             // Resumen en vivo del formulario: fechas, total de cuotas, intereses y avisos de coherencia.
             updateLoanFormSummary() {
                 const box = document.getElementById('loan-summary');
@@ -4151,6 +4903,7 @@
                 const empty = document.getElementById('categories-monthly-summary-empty');
                 if (!tbody || !tfoot || !empty) return;
                 if (!this.expandedCategoryExpenses) this.expandedCategoryExpenses = new Set();
+                this.renderCategoryTrend();
 
                 const fmt = value => this.formatCurrency(value);
                 const sumOf = list => list.reduce((acc, tx) => acc + (Number(tx.amount) || 0), 0);
@@ -4332,6 +5085,207 @@
                 });
 
                 // No se muestra una fila de total: los indicadores superiores ya resumen el gasto mensual.
+            }
+
+            // ---------- Evolución del gasto de una categoría ----------
+            setCategoryTrendCategory(id) {
+                this.categoryTrendId = id;
+                this.renderCategoryTrend();
+            }
+
+            setCategoryTrendRange(range) {
+                this.categoryTrendRange = range;
+                this.renderCategoryTrend();
+            }
+
+            // Barras verticales con el gasto mensual de una categoría y una línea con su media mensual.
+            // El periodo (6 meses, 12 meses o todo) termina en el mes seleccionado. La media se calcula desde el primer
+            // mes con gasto en la categoría y no cuenta el mes en curso, que está incompleto.
+            renderCategoryTrend() {
+                const select = document.getElementById('cat-trend-select');
+                const canvas = document.getElementById('chart-category-trend');
+                const empty = document.getElementById('cat-trend-empty');
+                const note = document.getElementById('cat-trend-note');
+                const wrap = document.getElementById('cat-trend-chart-wrap');
+                if (!select || !canvas || !empty || !note || !wrap) return;
+                if (!this.charts) this.charts = {};
+
+                const fmt = value => this.formatCurrency(value);
+                const rangeSetting = this.categoryTrendRange ?? 12;
+                document.querySelectorAll('#cat-trend-range-group button').forEach(button => {
+                    const active = Number(button.dataset.range) === rangeSetting;
+                    button.setAttribute('aria-pressed', String(active));
+                    button.classList.toggle('bg-apple-blue', active);
+                    button.classList.toggle('text-white', active);
+                    button.classList.toggle('text-gray-400', !active);
+                });
+                const showEmpty = message => {
+                    if (this.charts.categoryTrend) { this.charts.categoryTrend.destroy(); delete this.charts.categoryTrend; }
+                    this._categoryTrendSignature = null;
+                    wrap.classList.add('hidden');
+                    empty.classList.remove('hidden');
+                    empty.textContent = message;
+                    canvas.setAttribute('aria-label', message);
+                };
+
+                // Categorías de gasto (y "Sin categoría" si hay gastos huérfanos).
+                const expenseCategories = this.db.categories.filter(c => c.type === 'expense')
+                    .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+                const knownIds = new Set(expenseCategories.map(c => c.id));
+                const allExpenses = this.getAllTransactions().filter(tx => tx.type === 'expense');
+                const options = expenseCategories.map(c => ({ id: c.id, label: `${c.icon || '🏷️'} ${c.name}`, name: c.name, color: c.color || '#0A84FF' }));
+                if (allExpenses.some(tx => !knownIds.has(tx.category))) options.push({ id: '__uncategorized', label: '🏷️ Sin categoría', name: 'Sin categoría', color: '#8E8E93' });
+                if (!options.length) {
+                    select.innerHTML = '';
+                    note.textContent = 'No hay categorías de gasto.';
+                    return showEmpty('No hay categorías de gasto para mostrar.');
+                }
+                const belongs = (tx, id) => id === '__uncategorized' ? !knownIds.has(tx.category) : tx.category === id;
+
+                // Categoría elegida; por defecto, la que más gasta en el mes seleccionado.
+                let selectedId = this.categoryTrendId;
+                if (!options.some(option => option.id === selectedId)) {
+                    const monthExpenses = this.getTransactionsForMonth(this.selectedMonth).filter(tx => tx.type === 'expense');
+                    let best = options[0];
+                    let bestTotal = 0;
+                    options.forEach(option => {
+                        const total = monthExpenses.filter(tx => belongs(tx, option.id)).reduce((acc, tx) => acc + (Number(tx.amount) || 0), 0);
+                        if (total > bestTotal) { best = option; bestTotal = total; }
+                    });
+                    selectedId = best.id;
+                    this.categoryTrendId = selectedId;
+                }
+                const selected = options.find(option => option.id === selectedId);
+                select.innerHTML = options.map(option => `<option value="${escapeHTML(option.id)}">${escapeHTML(option.label)}</option>`).join('');
+                select.value = selectedId;
+
+                // Meses del periodo: terminan en el mes seleccionado (nunca antes del primer movimiento propio).
+                const [endYear, endMonth] = this.selectedMonth.split('-').map(Number);
+                const endIndex = endYear * 12 + (endMonth - 1);
+                const keyOfIndex = index => `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
+                const ownMonths = this.db.transactions.map(tx => String(tx.date || '').slice(0, 7)).filter(key => /^\d{4}-\d{2}$/.test(key)).sort();
+                const earliestOwn = ownMonths[0];
+                let startIndex;
+                if (rangeSetting > 0) {
+                    startIndex = endIndex - rangeSetting + 1;
+                } else {
+                    const categoryMonths = allExpenses.filter(tx => belongs(tx, selectedId))
+                        .map(tx => String(tx.date || '').slice(0, 7))
+                        .filter(key => /^\d{4}-\d{2}$/.test(key) && key <= this.selectedMonth && (!earliestOwn || key >= earliestOwn)).sort();
+                    if (!categoryMonths.length) startIndex = endIndex;
+                    else { const [firstYear, firstMonth] = categoryMonths[0].split('-').map(Number); startIndex = firstYear * 12 + (firstMonth - 1); }
+                }
+                startIndex = Math.max(startIndex, endIndex - 599);
+
+                const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+                const keys = [];
+                const labels = [];
+                const values = [];
+                for (let index = startIndex; index <= endIndex; index++) {
+                    const key = keyOfIndex(index);
+                    keys.push(key);
+                    labels.push(`${monthNames[index % 12]} ${String(Math.floor(index / 12)).slice(-2)}`);
+                    values.push(Math.round(this.getTransactionsForMonth(key)
+                        .filter(tx => tx.type === 'expense' && belongs(tx, selectedId))
+                        .reduce((acc, tx) => acc + (Number(tx.amount) || 0), 0) * 100) / 100);
+                }
+                const firstSpend = values.findIndex(value => value > 0);
+                if (firstSpend === -1) {
+                    note.textContent = `${selected.name}: sin gasto en el periodo seleccionado.`;
+                    return showEmpty('Esta categoría no tiene gasto en el periodo seleccionado.');
+                }
+
+                // Media mensual desde el primer mes con gasto, sin el mes en curso (incompleto).
+                const currentKey = this.monthKeyFromDate(new Date());
+                const averageValues = values.slice(firstSpend);
+                const averageKeys = keys.slice(firstSpend);
+                let excludedCurrent = false;
+                if (averageKeys.length > 1 && averageKeys[averageKeys.length - 1] === currentKey) {
+                    averageValues.pop();
+                    excludedCurrent = true;
+                }
+                const average = Math.round(averageValues.reduce((acc, value) => acc + value, 0) / averageValues.length * 100) / 100;
+                const maxValue = Math.max(...values);
+                const maxLabel = labels[values.indexOf(maxValue)];
+                const total = values.reduce((acc, value) => acc + value, 0);
+                const summary = `${selected.name}: media de ${fmt(average)} al mes en ${averageValues.length} ${averageValues.length === 1 ? 'mes' : 'meses'}${excludedCurrent ? ' (sin contar el mes en curso, que está incompleto)' : ''}. Máximo ${fmt(maxValue)} en ${maxLabel}. Total del periodo ${fmt(total)}.`;
+                note.textContent = summary;
+                canvas.setAttribute('aria-label', summary);
+                wrap.classList.remove('hidden');
+                empty.classList.add('hidden');
+
+                const signature = JSON.stringify([selectedId, labels, values, average, excludedCurrent]);
+                if (this.charts.categoryTrend && this._categoryTrendSignature === signature) return;
+                this._categoryTrendSignature = signature;
+
+                const toRgba = (hex, alpha) => {
+                    const match = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+                    if (!match) return `rgba(10, 132, 255, ${alpha})`;
+                    const value = parseInt(match[1], 16);
+                    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+                };
+                const isCurrent = index => keys[index] === currentKey;
+                const isDark = document.documentElement.classList.contains('dark');
+                const showLabels = values.length <= 12;
+                const valueLabels = {
+                    id: 'categoryTrendValueLabels',
+                    afterDatasetsDraw: chart => {
+                        if (!showLabels) return;
+                        const { ctx } = chart;
+                        ctx.save();
+                        ctx.font = '600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
+                        ctx.fillStyle = isDark ? '#F5F5F7' : '#1D1D1F';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        chart.getDatasetMeta(0).data.forEach((bar, index) => {
+                            const value = Number(chart.data.datasets[0].data[index]);
+                            if (value > 0) ctx.fillText(fmt(value), bar.x, bar.y - 4);
+                        });
+                        ctx.restore();
+                    }
+                };
+
+                if (this.charts.categoryTrend) { this.charts.categoryTrend.destroy(); delete this.charts.categoryTrend; }
+                this.charts.categoryTrend = new Chart(canvas.getContext('2d'), {
+                    type: 'bar',
+                    plugins: [valueLabels],
+                    data: {
+                        labels,
+                        datasets: [
+                            {
+                                type: 'bar', label: 'Gasto del mes', data: values, order: 2, borderRadius: 6, maxBarThickness: 48,
+                                backgroundColor: values.map((_, index) => toRgba(selected.color, isCurrent(index) ? 0.35 : 0.8)),
+                                borderColor: values.map((_, index) => isCurrent(index) ? toRgba(selected.color, 0.9) : 'transparent'),
+                                borderWidth: values.map((_, index) => isCurrent(index) ? 1.5 : 0)
+                            },
+                            {
+                                type: 'line', label: `Media: ${fmt(average)}`, data: values.map(() => average), order: 1,
+                                borderColor: '#FF9F0A', backgroundColor: '#FF9F0A', borderWidth: 2, borderDash: [6, 6],
+                                pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        layout: { padding: { top: showLabels ? 18 : 4 } },
+                        plugins: {
+                            legend: { labels: { color: '#8E8E93', font: { size: 11 }, usePointStyle: true, pointStyle: 'circle' } },
+                            tooltip: {
+                                callbacks: {
+                                    label: context => context.dataset.type === 'line'
+                                        ? context.dataset.label
+                                        : `${context.dataset.label}: ${fmt(context.parsed.y)}${isCurrent(context.dataIndex) ? ' (mes en curso, incompleto)' : ''}`
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#8E8E93', font: { size: 10 }, maxRotation: 0, autoSkip: true } },
+                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8E8E93', font: { size: 10 }, callback: value => fmt(value) } }
+                        }
+                    }
+                });
             }
 
             toggleCategoryExpenseDetail(index) {
@@ -4716,6 +5670,7 @@
 
                 this.updateAnalysisRangeButtons();
                 this.renderTopExpenses(currentTxs);
+                this.renderLoanAnalysisPanel();
 
                 // Render the four financial analysis charts
                 this.renderAnalysisCharts();
