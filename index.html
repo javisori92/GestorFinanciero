@@ -1230,9 +1230,9 @@
                                 <label class="sr-only" for="cat-trend-select">Categoría</label>
                                 <select id="cat-trend-select" onchange="app.setCategoryTrendCategory(this.value)" class="apple-input rounded-xl text-xs text-white px-3 py-1.5"></select>
                                 <div id="cat-trend-range-group" role="group" aria-label="Periodo de la evolución de la categoría" class="inline-flex rounded-xl bg-white/5 border border-white/10 p-0.5 text-xs">
+                                    <button type="button" data-range="3" aria-pressed="false" onclick="app.setCategoryTrendRange(3)" class="px-3 py-1.5 rounded-lg font-medium transition">3 meses</button>
                                     <button type="button" data-range="6" aria-pressed="false" onclick="app.setCategoryTrendRange(6)" class="px-3 py-1.5 rounded-lg font-medium transition">6 meses</button>
                                     <button type="button" data-range="12" aria-pressed="true" onclick="app.setCategoryTrendRange(12)" class="px-3 py-1.5 rounded-lg font-medium transition">12 meses</button>
-                                    <button type="button" data-range="0" aria-pressed="false" onclick="app.setCategoryTrendRange(0)" class="px-3 py-1.5 rounded-lg font-medium transition">Todo</button>
                                 </div>
                             </div>
                         </div>
@@ -5099,7 +5099,7 @@
             }
 
             // Barras verticales con el gasto mensual de una categoría y una línea con su media mensual.
-            // El periodo (6 meses, 12 meses o todo) termina en el mes seleccionado. La media se calcula desde el primer
+            // El periodo (3, 6 o 12 meses) termina en el mes seleccionado. La media se calcula desde el primer
             // mes con gasto en la categoría y no cuenta el mes en curso, que está incompleto.
             renderCategoryTrend() {
                 const select = document.getElementById('cat-trend-select');
@@ -5111,7 +5111,7 @@
                 if (!this.charts) this.charts = {};
 
                 const fmt = value => this.formatCurrency(value);
-                const rangeSetting = this.categoryTrendRange ?? 12;
+                const rangeSetting = [3, 6, 12].includes(this.categoryTrendRange) ? this.categoryTrendRange : 12;
                 document.querySelectorAll('#cat-trend-range-group button').forEach(button => {
                     const active = Number(button.dataset.range) === rangeSetting;
                     button.setAttribute('aria-pressed', String(active));
@@ -5159,23 +5159,11 @@
                 select.innerHTML = options.map(option => `<option value="${escapeHTML(option.id)}">${escapeHTML(option.label)}</option>`).join('');
                 select.value = selectedId;
 
-                // Meses del periodo: terminan en el mes seleccionado (nunca antes del primer movimiento propio).
+                // Meses del periodo (3, 6 o 12): terminan en el mes seleccionado.
                 const [endYear, endMonth] = this.selectedMonth.split('-').map(Number);
                 const endIndex = endYear * 12 + (endMonth - 1);
                 const keyOfIndex = index => `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`;
-                const ownMonths = this.db.transactions.map(tx => String(tx.date || '').slice(0, 7)).filter(key => /^\d{4}-\d{2}$/.test(key)).sort();
-                const earliestOwn = ownMonths[0];
-                let startIndex;
-                if (rangeSetting > 0) {
-                    startIndex = endIndex - rangeSetting + 1;
-                } else {
-                    const categoryMonths = allExpenses.filter(tx => belongs(tx, selectedId))
-                        .map(tx => String(tx.date || '').slice(0, 7))
-                        .filter(key => /^\d{4}-\d{2}$/.test(key) && key <= this.selectedMonth && (!earliestOwn || key >= earliestOwn)).sort();
-                    if (!categoryMonths.length) startIndex = endIndex;
-                    else { const [firstYear, firstMonth] = categoryMonths[0].split('-').map(Number); startIndex = firstYear * 12 + (firstMonth - 1); }
-                }
-                startIndex = Math.max(startIndex, endIndex - 599);
+                const startIndex = endIndex - rangeSetting + 1;
 
                 const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
                 const keys = [];
