@@ -584,6 +584,20 @@
             box-shadow: none !important;
         }
 
+        /* Evolución de una categoría: los selectores van siempre arriba a la derecha. En pantallas muy estrechas
+           el título se oculta visualmente (sigue disponible para lectores de pantalla) para dejarles todo el ancho. */
+        @media (max-width: 400px) {
+            #cat-trend-header > h3 {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                white-space: nowrap;
+            }
+            #cat-trend-controls { max-width: 100%; }
+        }
+
         @media (max-width: 820px) {
             body { overflow: hidden; }
             #app-container { flex-direction: column; height: 100dvh; min-height: 0; }
@@ -817,6 +831,9 @@
                             </button>
                             <button onclick="app.switchTab('loans')" id="nav-loans" class="nav-btn nav-sub-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-300 hover:bg-white/10 hover:text-white transition">
                                 <i class="fa-solid fa-landmark w-4 text-center text-apple-purple"></i><span>Préstamos y financiación</span>
+                            </button>
+                            <button onclick="app.switchTab('loan-valuator')" id="nav-loan-valuator" class="nav-btn nav-sub-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-300 hover:bg-white/10 hover:text-white transition">
+                                <i class="fa-solid fa-scale-balanced w-4 text-center text-apple-blue"></i><span>Valorar una financiación</span>
                             </button>
                         </div>
                     </div>
@@ -1193,6 +1210,106 @@
                     </div>
                 </div>
 
+                <!-- ================= TAB: VALORAR UNA FINANCIACIÓN ================= -->
+                <div id="tab-loan-valuator" class="tab-content space-y-6 hidden">
+                    <div id="loan-valuator" class="glass-panel rounded-2xl border border-white/10">
+                        <div class="p-5 flex items-center gap-3">
+                            <span class="w-10 h-10 rounded-xl bg-apple-purple/20 text-apple-purple flex items-center justify-center shrink-0"><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i></span>
+                            <div>
+                                <h3 class="text-sm font-semibold text-white">Valorar una financiación</h3>
+                                <p class="text-xs text-gray-400">Comprueba si unas condiciones son buenas antes de firmar, con los datos de la hoja informativa.</p>
+                            </div>
+                        </div>
+                        <div class="px-5 pb-5 space-y-4 border-t border-white/10 pt-4">
+                            <form id="lv-form" onsubmit="event.preventDefault(); app.runLoanValuation();" class="space-y-4 text-xs">
+                                <fieldset class="space-y-3">
+                                    <legend class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Datos de la oferta (hoja INE o FEIN)</legend>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div><label class="block text-gray-400 mb-1" for="lv-type">Tipo de financiación</label>
+                                            <select id="lv-type" onchange="app.updateValuationChecklistLabel()" class="w-full px-3 py-2 apple-input rounded-xl text-white">
+                                                <option value="personal">Préstamo personal</option>
+                                                <option value="consumer">Compra financiada</option>
+                                                <option value="car">Vehículo</option>
+                                                <option value="mortgage">Hipoteca</option>
+                                                <option value="credit_card">Tarjeta / crédito</option>
+                                                <option value="student">Estudios</option>
+                                                <option value="other">Otro</option>
+                                            </select></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-capital">Importe a financiar (€) *</label>
+                                            <input type="number" id="lv-capital" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-installments">Número de cuotas mensuales *</label>
+                                            <input type="number" id="lv-installments" min="1" max="600" step="1" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-amount">Importe de la cuota (€) *</label>
+                                            <input type="number" id="lv-amount" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-total">Importe total a devolver (€)</label>
+                                            <input type="number" id="lv-total" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-last">Última cuota, si es distinta (€)</label>
+                                            <input type="number" id="lv-last" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-tin">TIN (%)</label>
+                                            <input type="number" id="lv-tin" min="0" max="100" step="0.001" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-apr">TAE (%)</label>
+                                            <input type="number" id="lv-apr" min="0" max="100" step="0.001" placeholder="Si no la sabes, se calcula" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-fee">Comisión de apertura (€)</label>
+                                            <input type="number" id="lv-fee" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-extra">Seguro u otros gastos por cuota (€)</label>
+                                            <input type="number" id="lv-extra" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-down">Entrada o pago inicial (€)</label>
+                                            <input type="number" id="lv-down" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="lv-early">Comisión por cancelación anticipada (%)</label>
+                                            <input type="number" id="lv-early" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                    </div>
+                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer">
+                                        <input type="checkbox" id="lv-insurance-required" class="mt-0.5">
+                                        <span>Incluye un seguro vinculado obligatorio.</span>
+                                    </label>
+                                </fieldset>
+                                <fieldset class="space-y-2">
+                                    <legend class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Antes de firmar</legend>
+                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-ine" class="mt-0.5"><span id="lv-chk-ine-label">Me han entregado la información normalizada europea (INE).</span></label>
+                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-withdraw" class="mt-0.5"><span>Sé que puedo desistir en el plazo legal.</span></label>
+                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-insopt" class="mt-0.5"><span>Los seguros vinculados son opcionales o no hay ninguno.</span></label>
+                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-auth" class="mt-0.5"><span>He comprobado que la entidad está autorizada por el Banco de España.</span></label>
+                                </fieldset>
+                                <div class="flex justify-end">
+                                    <button type="submit" class="px-4 py-2 rounded-xl bg-apple-blue hover:bg-blue-600 text-white text-xs font-medium transition">Valorar</button>
+                                </div>
+                            </form>
+
+                            <div id="lv-result" class="space-y-4" aria-live="polite"></div>
+
+                            <details class="rounded-xl bg-white/5 border border-white/10">
+                                <summary class="px-4 py-3 cursor-pointer text-xs text-gray-300">Referencias de mercado (editables)</summary>
+                                <div class="px-4 pb-4 space-y-3 text-xs">
+                                    <p class="text-gray-400">TAE media orientativa por tipo de producto con la que se compara tu oferta. Son valores aproximados: actualízalos cuando consultes datos más recientes (Banco de España, INE).</p>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-personal">Préstamo personal</label>
+                                            <input type="number" id="ref-rate-personal" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-consumer">Compra financiada</label>
+                                            <input type="number" id="ref-rate-consumer" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-car">Vehículo</label>
+                                            <input type="number" id="ref-rate-car" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-mortgage">Hipoteca</label>
+                                            <input type="number" id="ref-rate-mortgage" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-credit_card">Tarjeta / crédito</label>
+                                            <input type="number" id="ref-rate-credit_card" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-student">Estudios</label>
+                                            <input type="number" id="ref-rate-student" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-other">Otro</label>
+                                            <input type="number" id="ref-rate-other" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
+                                        <div><label class="block text-gray-400 mb-1" for="ref-updated">Fecha de los datos</label>
+                                            <input type="date" id="ref-updated" class="w-full px-3 py-2 apple-input rounded-xl text-white"></div>
+                                    </div>
+                                    <p id="ref-stale-note" class="text-apple-orange"></p>
+                                    <div class="flex flex-wrap justify-end gap-2">
+                                        <button type="button" onclick="app.resetReferenceRates()" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15">Restablecer valores iniciales</button>
+                                        <button type="button" onclick="app.saveReferenceRates()" class="px-3 py-1.5 rounded-lg bg-apple-blue text-white hover:bg-blue-600">Guardar referencias</button>
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- ================= TAB: GASTOS POR CATEGORÍA ================= -->
                 <div id="tab-category-expenses" class="tab-content space-y-6 hidden">
                     <!-- Resumen del mes -->
@@ -1221,21 +1338,20 @@
 
                     <!-- Evolución del gasto de una categoría -->
                     <div class="glass-panel p-5 rounded-2xl border border-white/10 space-y-4">
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div class="min-w-0">
-                                <h3 class="text-sm font-semibold text-white">Evolución de una categoría</h3>
-                                <p class="text-xs text-gray-400 mt-1" id="cat-trend-note">Elige una categoría para ver su gasto mes a mes y su media.</p>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-2">
+                        <!-- Título a la izquierda; selectores siempre arriba a la derecha (si no caben en una línea, se apilan sin dejar de estar a la derecha) -->
+                        <div class="flex items-start justify-between gap-3" id="cat-trend-header">
+                            <h3 class="flex-1 min-w-0 text-sm font-semibold text-white pt-1.5">Evolución de una categoría</h3>
+                            <div class="flex flex-none flex-wrap items-center justify-end gap-2 max-w-[75%]" id="cat-trend-controls">
                                 <label class="sr-only" for="cat-trend-select">Categoría</label>
-                                <select id="cat-trend-select" onchange="app.setCategoryTrendCategory(this.value)" class="apple-input rounded-xl text-xs text-white px-3 py-1.5"></select>
+                                <select id="cat-trend-select" onchange="app.setCategoryTrendCategory(this.value)" class="apple-input rounded-xl text-xs text-white px-3 py-1.5 max-w-full"></select>
                                 <div id="cat-trend-range-group" role="group" aria-label="Periodo de la evolución de la categoría" class="inline-flex rounded-xl bg-white/5 border border-white/10 p-0.5 text-xs">
-                                    <button type="button" data-range="3" aria-pressed="false" onclick="app.setCategoryTrendRange(3)" class="px-3 py-1.5 rounded-lg font-medium transition">3 meses</button>
-                                    <button type="button" data-range="6" aria-pressed="false" onclick="app.setCategoryTrendRange(6)" class="px-3 py-1.5 rounded-lg font-medium transition">6 meses</button>
-                                    <button type="button" data-range="12" aria-pressed="true" onclick="app.setCategoryTrendRange(12)" class="px-3 py-1.5 rounded-lg font-medium transition">12 meses</button>
+                                    <button type="button" data-range="3" aria-pressed="false" onclick="app.setCategoryTrendRange(3)" class="px-2.5 sm:px-3 py-1.5 rounded-lg font-medium transition whitespace-nowrap">3 meses</button>
+                                    <button type="button" data-range="6" aria-pressed="false" onclick="app.setCategoryTrendRange(6)" class="px-2.5 sm:px-3 py-1.5 rounded-lg font-medium transition whitespace-nowrap">6 meses</button>
+                                    <button type="button" data-range="12" aria-pressed="true" onclick="app.setCategoryTrendRange(12)" class="px-2.5 sm:px-3 py-1.5 rounded-lg font-medium transition whitespace-nowrap">12 meses</button>
                                 </div>
                             </div>
                         </div>
+                        <p class="text-xs text-gray-400" id="cat-trend-note">Elige una categoría para ver su gasto mes a mes y su media.</p>
                         <div class="h-64 relative" id="cat-trend-chart-wrap"><canvas id="chart-category-trend" role="img" aria-label="Gasto mensual de la categoría seleccionada"></canvas></div>
                         <div id="cat-trend-empty" class="hidden py-10 text-center text-xs text-gray-500">Esta categoría no tiene gasto en el periodo seleccionado.</div>
                     </div>
@@ -1547,106 +1663,6 @@
                             <!-- Dynamic recommendations cards -->
                         </div>
                     </div>
-                    <!-- Valorar una financiación (plegado por defecto) -->
-                    <details id="loan-valuator" class="glass-panel rounded-2xl border border-white/10 group">
-                        <summary class="p-5 cursor-pointer list-none flex items-center justify-between gap-3">
-                            <span class="flex items-center gap-3">
-                                <span class="w-10 h-10 rounded-xl bg-apple-purple/20 text-apple-purple flex items-center justify-center"><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i></span>
-                                <span>
-                                    <span class="block text-sm font-semibold text-white">Valorar una financiación</span>
-                                    <span class="block text-xs text-gray-400">Comprueba si unas condiciones son buenas antes de firmar, con los datos de la hoja informativa.</span>
-                                </span>
-                            </span>
-                            <i class="fa-solid fa-chevron-down text-xs text-gray-400 transition group-open:rotate-180" aria-hidden="true"></i>
-                        </summary>
-                        <div class="px-5 pb-5 space-y-4 border-t border-white/10 pt-4">
-                            <form id="lv-form" onsubmit="event.preventDefault(); app.runLoanValuation();" class="space-y-4 text-xs">
-                                <fieldset class="space-y-3">
-                                    <legend class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Datos de la oferta (hoja INE o FEIN)</legend>
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div><label class="block text-gray-400 mb-1" for="lv-type">Tipo de financiación</label>
-                                            <select id="lv-type" class="w-full px-3 py-2 apple-input rounded-xl text-white">
-                                                <option value="personal">Préstamo personal</option>
-                                                <option value="consumer">Compra financiada</option>
-                                                <option value="car">Vehículo</option>
-                                                <option value="mortgage">Hipoteca</option>
-                                                <option value="credit_card">Tarjeta / crédito</option>
-                                                <option value="student">Estudios</option>
-                                                <option value="other">Otro</option>
-                                            </select></div>
-                                        <div><label class="block text-gray-400 mb-1" for="lv-capital">Importe a financiar (€) *</label>
-                                            <input type="number" id="lv-capital" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="lv-installments">Número de cuotas mensuales *</label>
-                                            <input type="number" id="lv-installments" min="1" max="600" step="1" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="lv-amount">Importe de la cuota (€) *</label>
-                                            <input type="number" id="lv-amount" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="lv-total">Importe total a devolver (€)</label>
-                                            <input type="number" id="lv-total" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="lv-last">Última cuota, si es distinta (€)</label>
-                                            <input type="number" id="lv-last" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="lv-tin">TIN (%)</label>
-                                            <input type="number" id="lv-tin" min="0" max="100" step="0.001" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="lv-apr">TAE (%)</label>
-                                            <input type="number" id="lv-apr" min="0" max="100" step="0.001" placeholder="Si no la sabes, se calcula" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="lv-fee">Comisión de apertura (€)</label>
-                                            <input type="number" id="lv-fee" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="lv-extra">Seguro u otros gastos por cuota (€)</label>
-                                            <input type="number" id="lv-extra" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="lv-down">Entrada o pago inicial (€)</label>
-                                            <input type="number" id="lv-down" min="0" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="lv-early">Comisión por cancelación anticipada (%)</label>
-                                            <input type="number" id="lv-early" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                    </div>
-                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer">
-                                        <input type="checkbox" id="lv-insurance-required" class="mt-0.5">
-                                        <span>Incluye un seguro vinculado obligatorio.</span>
-                                    </label>
-                                </fieldset>
-                                <fieldset class="space-y-2">
-                                    <legend class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Antes de firmar</legend>
-                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-ine" class="mt-0.5"><span id="lv-chk-ine-label">Me han entregado la información normalizada europea (INE).</span></label>
-                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-withdraw" class="mt-0.5"><span>Sé que puedo desistir en el plazo legal.</span></label>
-                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-insopt" class="mt-0.5"><span>Los seguros vinculados son opcionales o no hay ninguno.</span></label>
-                                    <label class="flex items-start gap-2 text-gray-300 cursor-pointer"><input type="checkbox" id="lv-chk-auth" class="mt-0.5"><span>He comprobado que la entidad está autorizada por el Banco de España.</span></label>
-                                </fieldset>
-                                <div class="flex justify-end">
-                                    <button type="submit" class="px-4 py-2 rounded-xl bg-apple-blue hover:bg-blue-600 text-white text-xs font-medium transition">Valorar</button>
-                                </div>
-                            </form>
-
-                            <div id="lv-result" class="space-y-4" aria-live="polite"></div>
-
-                            <details class="rounded-xl bg-white/5 border border-white/10">
-                                <summary class="px-4 py-3 cursor-pointer text-xs text-gray-300">Referencias de mercado (editables)</summary>
-                                <div class="px-4 pb-4 space-y-3 text-xs">
-                                    <p class="text-gray-400">TAE media orientativa por tipo de producto con la que se compara tu oferta. Son valores aproximados: actualízalos cuando consultes datos más recientes (Banco de España, INE).</p>
-                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-personal">Préstamo personal</label>
-                                            <input type="number" id="ref-rate-personal" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-consumer">Compra financiada</label>
-                                            <input type="number" id="ref-rate-consumer" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-car">Vehículo</label>
-                                            <input type="number" id="ref-rate-car" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-mortgage">Hipoteca</label>
-                                            <input type="number" id="ref-rate-mortgage" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-credit_card">Tarjeta / crédito</label>
-                                            <input type="number" id="ref-rate-credit_card" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-student">Estudios</label>
-                                            <input type="number" id="ref-rate-student" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="ref-rate-other">Otro</label>
-                                            <input type="number" id="ref-rate-other" min="0" max="100" step="0.01" class="w-full px-3 py-2 apple-input rounded-xl text-white font-mono"></div>
-                                        <div><label class="block text-gray-400 mb-1" for="ref-updated">Fecha de los datos</label>
-                                            <input type="date" id="ref-updated" class="w-full px-3 py-2 apple-input rounded-xl text-white"></div>
-                                    </div>
-                                    <p id="ref-stale-note" class="text-apple-orange"></p>
-                                    <div class="flex flex-wrap justify-end gap-2">
-                                        <button type="button" onclick="app.resetReferenceRates()" class="px-3 py-1.5 rounded-lg bg-white/10 text-gray-300 hover:bg-white/15">Restablecer valores iniciales</button>
-                                        <button type="button" onclick="app.saveReferenceRates()" class="px-3 py-1.5 rounded-lg bg-apple-blue text-white hover:bg-blue-600">Guardar referencias</button>
-                                    </div>
-                                </div>
-                            </details>
-                        </div>
-                    </details>
                 </div>
 
                 <!-- ================= TAB 6: SETTINGS & SECURITY ================= -->
@@ -2454,7 +2470,7 @@
                 const navBtn = document.getElementById(`nav-${tabName}`);
                 if (navBtn) navBtn.classList.add('bg-white/15', 'text-white', 'shadow-md');
 
-                const parentGroup = ({ transactions: 'management', categories: 'management', loans: 'management', analysis: 'analysis', 'monthly-summary': 'analysis', 'category-expenses': 'analysis', insights: 'analysis', settings: 'system' })[tabName];
+                const parentGroup = ({ transactions: 'management', categories: 'management', loans: 'management', 'loan-valuator': 'management', analysis: 'analysis', 'monthly-summary': 'analysis', 'category-expenses': 'analysis', insights: 'analysis', settings: 'system' })[tabName];
                 // Al abrir una sección de un grupo se despliega ese grupo y se pliegan los demás.
                 // El Panel Principal no pertenece a ningún grupo: no modifica el estado de los desplegables.
                 if (parentGroup) {
@@ -2479,6 +2495,7 @@
                     categories: 'Categorías y Presupuestos',
                     'monthly-summary': 'Resumen Mensual',
                     loans: 'Préstamos y Financiación',
+                    'loan-valuator': 'Valorar una Financiación',
                     'category-expenses': 'Gastos por Categoría',
                     analysis: 'Análisis Mensual y Comparativas',
                     insights: 'Asistente Financiero Inteligente',
@@ -2587,7 +2604,8 @@
                 else if (this.activeTab === 'category-expenses') this.renderCategoryExpensesTab();
                 else if (this.activeTab === 'monthly-summary') this.renderMonthlySummaryTab();
                 else if (this.activeTab === 'analysis') this.renderAnalysisTab();
-                else if (this.activeTab === 'insights') { this.renderInsightsTab(); this.renderReferenceRatesEditor(); }
+                else if (this.activeTab === 'insights') this.renderInsightsTab();
+                else if (this.activeTab === 'loan-valuator') this.renderReferenceRatesEditor();
             }
 
             formatCurrency(amount) {
@@ -4190,6 +4208,11 @@
                     const months = (now.getFullYear() - uy) * 12 + (now.getMonth() + 1 - um);
                     note.textContent = months >= 6 ? `Estas referencias tienen unos ${months} meses: conviene revisarlas antes de fiarte de la comparación.` : '';
                 }
+                this.updateValuationChecklistLabel();
+            }
+
+            // La primera casilla de "Antes de firmar" habla de la FEIN en hipotecas y de la INE en el resto.
+            updateValuationChecklistLabel() {
                 const ineLabel = document.getElementById('lv-chk-ine-label');
                 const typeSelect = document.getElementById('lv-type');
                 if (ineLabel && typeSelect) {
