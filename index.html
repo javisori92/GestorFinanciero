@@ -598,6 +598,36 @@
             #cat-trend-controls { max-width: 100%; }
         }
 
+        /* Calendario de cuotas de un préstamo: la cabecera queda fija, solo se desplazan las filas y la tabla
+           ocupa todo el ancho del contenedor (la barra de desplazamiento no se reserva hueco a la derecha). */
+        .loan-schedule {
+            --loan-schedule-head: #1f2023;
+            --loan-schedule-line: rgba(255, 255, 255, .12);
+            max-height: 16rem;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        html:not(.dark) .loan-schedule {
+            --loan-schedule-head: #f2f2f4;
+            --loan-schedule-line: rgba(0, 0, 0, .1);
+        }
+        .loan-schedule::-webkit-scrollbar { display: none; width: 0; height: 0; }
+        .loan-schedule table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        /* Fija cada celda de la cabecera (en lugar del thead entero), que es lo que mejor soportan los navegadores */
+        .loan-schedule thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background-color: var(--loan-schedule-head);
+            border-bottom: 1px solid var(--loan-schedule-line);
+        }
+
         @media (max-width: 820px) {
             body { overflow: hidden; }
             #app-container { flex-direction: column; height: 100dvh; min-height: 0; }
@@ -3887,7 +3917,7 @@
                             </tr>`;
                         }).join('');
                         scheduleHtml = `
-                            <div class="max-h-64 overflow-y-auto rounded-xl border border-white/10" id="loan-schedule-${escapeHTML(loan.id)}">
+                            <div class="loan-schedule rounded-xl border border-white/10" id="loan-schedule-${escapeHTML(loan.id)}">
                                 <table class="w-full text-left text-xs">
                                     <thead class="bg-white/5 text-gray-400 uppercase text-[10px]">
                                         <tr><th class="p-2">Nº</th><th class="p-2">Fecha</th><th class="p-2 text-right">Importe</th><th class="p-2 text-right">Estado</th><th class="p-2 text-right">Pendiente tras la cuota</th></tr>
