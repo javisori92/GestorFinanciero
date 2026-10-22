@@ -1922,6 +1922,20 @@
                 document.documentElement.classList.toggle('dark');
                 safeStorageSet('apple_vault_theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
                 this.applyTheme();
+                // Los gráficos fijan sus colores al dibujarse: se redibujan para que sigan el tema nuevo.
+                if (this.db) this.renderAll();
+            }
+
+            // Colores de los textos y ejes de los gráficos según el tema actual (día o noche).
+            getChartTheme() {
+                const isDark = document.documentElement.classList.contains('dark');
+                return {
+                    isDark,
+                    text: isDark ? '#F5F5F7' : '#1D1D1F',     // importes junto a las barras
+                    label: isDark ? '#D1D1D6' : '#3A3A3C',    // nombres de categorías
+                    muted: isDark ? '#8E8E93' : '#636366',    // ejes y leyendas
+                    grid: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(60, 60, 67, 0.12)'
+                };
             }
 
             async prepareEncryptionKey(password) {
@@ -5225,7 +5239,8 @@
                 wrap.classList.remove('hidden');
                 empty.classList.add('hidden');
 
-                const signature = JSON.stringify([selectedId, labels, values, average, excludedCurrent]);
+                const chartTheme = this.getChartTheme();
+                const signature = JSON.stringify([selectedId, labels, values, average, excludedCurrent, chartTheme.isDark]);
                 if (this.charts.categoryTrend && this._categoryTrendSignature === signature) return;
                 this._categoryTrendSignature = signature;
 
@@ -5236,7 +5251,6 @@
                     return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
                 };
                 const isCurrent = index => keys[index] === currentKey;
-                const isDark = document.documentElement.classList.contains('dark');
                 const showLabels = values.length <= 12;
                 const valueLabels = {
                     id: 'categoryTrendValueLabels',
@@ -5245,7 +5259,7 @@
                         const { ctx } = chart;
                         ctx.save();
                         ctx.font = '600 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
-                        ctx.fillStyle = isDark ? '#F5F5F7' : '#1D1D1F';
+                        ctx.fillStyle = this.getChartTheme().text;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'bottom';
                         chart.getDatasetMeta(0).data.forEach((bar, index) => {
@@ -5282,7 +5296,7 @@
                         interaction: { mode: 'index', intersect: false },
                         layout: { padding: { top: showLabels ? 18 : 4 } },
                         plugins: {
-                            legend: { labels: { color: '#8E8E93', font: { size: 11 }, usePointStyle: true, pointStyle: 'circle' } },
+                            legend: { labels: { color: chartTheme.muted, font: { size: 11 }, usePointStyle: true, pointStyle: 'circle' } },
                             tooltip: {
                                 callbacks: {
                                     label: context => context.dataset.type === 'line'
@@ -5292,8 +5306,8 @@
                             }
                         },
                         scales: {
-                            x: { grid: { display: false }, ticks: { color: '#8E8E93', font: { size: 10 }, maxRotation: 0, autoSkip: true } },
-                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8E8E93', font: { size: 10 }, callback: value => fmt(value) } }
+                            x: { grid: { display: false }, ticks: { color: chartTheme.muted, font: { size: 10 }, maxRotation: 0, autoSkip: true } },
+                            y: { beginAtZero: true, grid: { color: chartTheme.grid }, ticks: { color: chartTheme.muted, font: { size: 10 }, callback: value => fmt(value) } }
                         }
                     }
                 });
@@ -5829,7 +5843,7 @@
                 const categoryCanvas = document.getElementById('chart-analysis-categories');
                 const categoryData = categoryTotals.length ? categoryTotals : [{ name: 'Sin gastos registrados', total: 0, color: 'rgba(255,255,255,0.18)' }];
                 // Importe de cada categoría a la derecha de su barra (se reserva el margen necesario).
-                const isDarkTheme = document.documentElement.classList.contains('dark');
+                const chartTheme = this.getChartTheme();
                 const valueLabelFont = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
                 const measureContext = document.createElement('canvas').getContext('2d');
                 measureContext.font = valueLabelFont;
@@ -5841,7 +5855,7 @@
                         const { ctx } = chart;
                         ctx.save();
                         ctx.font = valueLabelFont;
-                        ctx.fillStyle = isDarkTheme ? '#F5F5F7' : '#1D1D1F';
+                        ctx.fillStyle = this.getChartTheme().text; // se lee al dibujar: siempre el tema actual
                         ctx.textAlign = 'left';
                         ctx.textBaseline = 'middle';
                         chart.getDatasetMeta(0).data.forEach((bar, index) => {
@@ -5863,8 +5877,8 @@
                         layout: { padding: { right: Math.ceil(widestLabel) + 16 } },
                         plugins: { ...baseOptions.plugins, legend: { display: false }, tooltip: { callbacks: { label: context => `Gasto: ${this.formatCurrency(context.parsed.x)}` } } },
                         scales: {
-                            x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#8E8E93', font: { size: 10 }, callback: value => this.formatCurrency(value) } },
-                            y: { grid: { display: false }, ticks: { color: '#D1D1D6', font: { size: 10 } } }
+                            x: { beginAtZero: true, grid: { color: chartTheme.grid }, ticks: { color: chartTheme.muted, font: { size: 10 }, callback: value => this.formatCurrency(value) } },
+                            y: { grid: { display: false }, ticks: { color: chartTheme.label, font: { size: 10 } } }
                         }
                     }
                 });
