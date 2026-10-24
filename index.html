@@ -1227,6 +1227,7 @@
                             <div class="text-xs text-gray-400 mb-1">Peso sobre tus ingresos</div>
                             <div class="text-xl font-bold text-white" id="loans-ratio">—</div>
                             <div class="text-xs text-gray-400 mt-1" id="loans-ratio-note"></div>
+                            <div class="text-[11px] text-gray-400 mt-1 hidden" id="loans-ratio-proration"></div>
                         </div>
                     </div>
 
@@ -1411,6 +1412,7 @@
                         <div id="categories-monthly-summary-empty" class="hidden p-5 text-center text-gray-500 text-xs">
                             No hay categorías de gasto para mostrar.
                         </div>
+                        <p id="ce-hidden-note" class="hidden text-[11px] text-gray-500"></p>
                     </div>
                 </div>
 
@@ -1475,6 +1477,7 @@
                             <div class="text-xs text-gray-400 mb-1">Cierre estimado del mes</div>
                             <div class="text-xl font-bold text-white" id="forecast-amount">—</div>
                             <div class="text-xs text-gray-400 mt-1" id="forecast-note">Gasto previsto a fin de mes.</div>
+                            <div class="text-[11px] text-gray-400 mt-1 hidden" id="forecast-proration"></div>
                         </div>
 
                         <div class="glass-panel p-4 rounded-2xl border border-white/10">
@@ -1490,6 +1493,7 @@
                                 <div id="fixed-variable-bar" class="h-full bg-apple-blue transition-all duration-500" style="width: 0%"></div>
                             </div>
                             <div class="text-xs text-gray-400 mt-1" id="fixed-variable-note">Fijo = movimientos marcados como recurrentes.</div>
+                            <div class="text-[11px] text-gray-400 mt-1 hidden" id="fixed-variable-proration"></div>
                         </div>
                     </div>
 
@@ -1646,6 +1650,7 @@
                             <div class="pt-2">
                                 <div class="text-3xl font-extrabold text-apple-green" id="insight-annual-savings">€0.00</div>
                                 <p class="text-xs text-gray-400 mt-1" id="insight-annual-note">Si mantienes el ritmo actual.</p>
+                                <p class="text-[11px] text-gray-400 mt-1 hidden" id="insight-annual-proration"></p>
                             </div>
                         </div>
                     </div>
@@ -1658,21 +1663,24 @@
                             </div>
                             <div>
                                 <h3 class="text-sm font-semibold text-white">Pagos y cobros recurrentes</h3>
-                                <p class="text-xs text-gray-400">Suma todos los ingresos y gastos marcados como mensuales o anuales (los anuales se prorratean por mes). Si repites el mismo concepto cada mes, cuenta solo el último mes registrado. Las cuotas de préstamos cuentan como gasto fijo y se registran solas.</p>
+                                <p class="text-xs text-gray-400">Suma todos los ingresos y gastos marcados como mensuales o anuales (los pagos anuales y las cuotas no mensuales se prorratean entre 12 meses; debajo de cada importe se indica cuándo están incluidos). Si repites el mismo concepto cada mes, cuenta solo el último mes registrado. Las cuotas de préstamos cuentan como gasto fijo y se registran solas.</p>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div class="p-3 rounded-xl bg-white/5 border border-white/10">
                                 <div class="text-[11px] text-gray-400">Ingresos fijos al mes</div>
                                 <div class="text-base font-bold text-apple-green" id="recurring-fixed-income">€0,00</div>
+                                <div class="mt-1 text-[11px] text-gray-400 hidden" id="recurring-fixed-income-note"></div>
                             </div>
                             <div class="p-3 rounded-xl bg-white/5 border border-white/10">
                                 <div class="text-[11px] text-gray-400">Gastos fijos al mes</div>
                                 <div class="text-base font-bold text-white" id="recurring-fixed-expense">€0,00</div>
+                                <div class="mt-1 text-[11px] text-gray-400 hidden" id="recurring-fixed-expense-note"></div>
                             </div>
                             <div class="p-3 rounded-xl bg-white/5 border border-white/10">
                                 <div class="text-[11px] text-gray-400">Neto fijo al mes</div>
                                 <div class="text-base font-bold text-white" id="recurring-fixed-net">€0,00</div>
+                                <div class="mt-1 text-[11px] text-gray-400 hidden" id="recurring-fixed-net-note"></div>
                             </div>
                         </div>
                         <div>
@@ -2937,7 +2945,7 @@
                     series.push({
                         key: `loan:${loan.id}`, tx: { id: `loan_${loan.id}`, concept: loan.name, category: loan.category, type: 'expense' },
                         type: 'expense', recurrence: 'monthly', amount: regular, monthlyAmount: regular / step,
-                        lastDate: reference.date, isLoan: true, loanId: loan.id
+                        periodMonths: step, lastDate: reference.date, isLoan: true, loanId: loan.id
                     });
                 });
                 return series;
@@ -3015,6 +3023,7 @@
                         series.push({
                             key: `${key}#${position}`, tx, type: tx.type, recurrence: tx.recurrence, amount,
                             monthlyAmount: tx.recurrence === 'annual' ? amount / 12 : amount,
+                            periodMonths: tx.recurrence === 'annual' ? 12 : 1,
                             lastDate: tx.date
                         });
                     });
@@ -3028,7 +3037,12 @@
                 const sumBy = type => series.filter(item => item.type === type).reduce((acc, item) => acc + item.monthlyAmount, 0);
                 const income = sumBy('income');
                 const expense = sumBy('expense');
-                return { series, income, expense, net: income - expense };
+                // Parte del importe mensual que viene de prorratear pagos anuales o cuotas no mensuales.
+                const proratedOf = type => {
+                    const items = series.filter(item => item.type === type && item.periodMonths > 1);
+                    return { monthly: items.reduce((acc, item) => acc + item.monthlyAmount, 0), count: items.length };
+                };
+                return { series, income, expense, net: income - expense, prorated: { income: proratedOf('income'), expense: proratedOf('expense') } };
             }
 
             // Calendario de vencimientos de los próximos `horizonDays` días: todas las fechas previstas de
@@ -3070,7 +3084,7 @@
                             key: `loan:${loan.id}:${item.number}`,
                             tx: { id: `loan_${loan.id}_${item.number}`, concept: `${loan.name} · cuota ${item.number}/${loan.installments}`, category: loan.category, type: 'expense' },
                             type: 'expense', recurrence: 'monthly', amount: item.amount, monthlyAmount: item.amount,
-                            lastDate: item.date, dueISO: item.date, overdue: false, isLoan: true, loanId: loan.id
+                            periodMonths: Number(loan.frequency) || 1, lastDate: item.date, dueISO: item.date, overdue: false, isLoan: true, loanId: loan.id
                         });
                     });
                 });
@@ -3121,20 +3135,111 @@
                 const elapsed = Math.max(1, now.getDate());
                 const fixedRegistered = sumAmount(expenses.filter(tx => this.isRecurringTx(tx)));
                 const variableSoFar = total - fixedRegistered;
-                const fixedPending = this.getRecurringDue(now)
-                    .filter(item => item.type === 'expense' && !item.isLoan && item.dueISO.startsWith(monthKey))
-                    .reduce((acc, item) => acc + item.amount, 0);
+                const pendingItems = this.getRecurringDue(now)
+                    .filter(item => item.type === 'expense' && !item.isLoan && item.dueISO.startsWith(monthKey));
+                const fixedPending = pendingItems.reduce((acc, item) => acc + item.amount, 0);
                 const variableForecast = (variableSoFar / elapsed) * daysInMonth;
+                // Pagos anuales o no mensuales incluidos en los fijos de este mes (se cuentan enteros, sin prorratear).
+                const proratedRegistered = expenses.filter(tx => this.isRecurringTx(tx) && this.getTxPeriodMonths(tx) > 1);
+                const proratedPending = pendingItems.filter(item => item.recurrence === 'annual');
                 return {
                     status: 'current', total, fixedRegistered, fixedPending, variableSoFar, variableForecast,
-                    projected: fixedRegistered + fixedPending + variableForecast, elapsed, daysInMonth
+                    projected: fixedRegistered + fixedPending + variableForecast, elapsed, daysInMonth,
+                    proratedCount: proratedRegistered.length + proratedPending.length,
+                    proratedCharged: sumAmount(proratedRegistered) + proratedPending.reduce((acc, item) => acc + item.amount, 0),
+                    proratedEquivalent: proratedRegistered.reduce((acc, tx) => acc + (Number(tx.amount) || 0) / this.getTxPeriodMonths(tx), 0)
+                        + proratedPending.reduce((acc, item) => acc + item.amount / 12, 0)
                 };
+            }
+
+            // Periodicidad de un movimiento fijo: 12 si es un pago anual, N si es una cuota de préstamo cada N meses.
+            getTxPeriodMonths(tx) {
+                if (tx.loanId && tx.installment > 0) {
+                    const loan = (this.db.loans || []).find(l => l.id === tx.loanId);
+                    return Number(loan && loan.frequency) || 1;
+                }
+                return tx.recurrence === 'annual' ? 12 : 1;
+            }
+
+            // ---------- Aviso uniforme de prorrateo en los importes fijos ----------
+            // Los pagos anuales (y las cuotas de préstamo no mensuales) se reparten entre 12 meses para obtener un gasto
+            // fijo mensual comparable. Todos los sitios que muestran un importe fijo usan este mismo aviso, con el
+            // mismo distintivo y la misma redacción:
+            //   "prorated": importe mensual que YA incluye esa parte prorrateada (÷ 12).
+            //   "charged":  importe de un mes concreto, con los pagos anuales de ese mes enteros (sin prorratear).
+            prorationNoun(count, type = 'expense') {
+                if (type === 'income') return count === 1 ? 'cobro anual o no mensual' : 'cobros anuales o no mensuales';
+                return count === 1 ? 'pago anual o no mensual' : 'pagos anuales o no mensuales';
+            }
+
+            prorationNoticeParts(info) {
+                const fmt = value => this.formatCurrency(value);
+                const type = info.type || 'expense';
+                const dividedTitle = 'Los pagos anuales y las cuotas no mensuales se reparten entre 12 meses para obtener un importe mensual comparable.';
+                if (info.mode === 'prorated') {
+                    if (!(info.count > 0)) return null;
+                    return {
+                        label: '÷ 12', title: dividedTitle,
+                        text: `Incluye ${fmt(info.monthly)} al mes por prorratear ${info.count} ${this.prorationNoun(info.count, type)} (${fmt(info.monthly * 12)} al año ÷ 12).`
+                    };
+                }
+                if (info.mode === 'summary') {
+                    if (!(info.expenseCount > 0) && !(info.incomeCount > 0)) return null;
+                    const parts = [];
+                    if (info.expenseCount > 0) parts.push(`gastos ${fmt(info.expenseMonthly)}/mes`);
+                    if (info.incomeCount > 0) parts.push(`ingresos ${fmt(info.incomeMonthly)}/mes`);
+                    return { label: '÷ 12', title: dividedTitle, text: `Los importes fijos incluyen pagos anuales o no mensuales prorrateados (÷ 12): ${parts.join(' e ')}.` };
+                }
+                if (info.mode === 'net') {
+                    if (!(info.expenseCount > 0) && !(info.incomeCount > 0)) return null;
+                    return { label: '÷ 12', title: dividedTitle, text: 'Calculado con los pagos anuales o no mensuales ya prorrateados.' };
+                }
+                if (info.mode === 'charged') {
+                    const title = 'Este importe es lo que se cobra realmente en el mes: los pagos anuales solo cuentan en el mes en que se cobran.';
+                    if (info.count > 0) {
+                        return {
+                            label: 'Sin prorratear', title,
+                            text: `Incluye ${fmt(info.amount)} de ${info.count} ${this.prorationNoun(info.count, type)} de este mes, sin prorratear (equivale a ${fmt(info.equivalent)} al mes).`
+                        };
+                    }
+                    if (info.fallbackMonthly > 0) {
+                        return {
+                            label: 'Sin prorratear', title,
+                            text: `Este mes no se cobra ningún pago anual o no mensual; el gasto fijo mensual los prorratea (${fmt(info.fallbackMonthly)} al mes).`
+                        };
+                    }
+                }
+                return null;
+            }
+
+            // Mismo aviso como texto plano (para recomendaciones) y como HTML con su distintivo.
+            prorationText(info) {
+                const parts = this.prorationNoticeParts(info);
+                return parts ? parts.text : '';
+            }
+
+            prorationNoticeHtml(info) {
+                const parts = this.prorationNoticeParts(info);
+                if (!parts) return '';
+                return `<span class="inline-flex items-center px-1.5 py-0.5 mr-1.5 rounded bg-apple-blue/15 text-apple-blue text-[10px] font-semibold align-middle" title="${escapeHTML(parts.title)}">${escapeHTML(parts.label)}</span>${escapeHTML(parts.text)}`;
+            }
+
+            setProrationNotice(id, info) {
+                const element = document.getElementById(id);
+                if (!element) return;
+                const html = info ? this.prorationNoticeHtml(info) : '';
+                element.innerHTML = html;
+                element.classList.toggle('hidden', !html);
             }
 
             renderRecurringPanel(summary, dueItems) {
                 const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
                 setText('recurring-fixed-income', this.formatCurrency(summary.income));
                 setText('recurring-fixed-expense', this.formatCurrency(summary.expense));
+                const proratedInfo = summary.prorated || { income: { monthly: 0, count: 0 }, expense: { monthly: 0, count: 0 } };
+                this.setProrationNotice('recurring-fixed-income-note', { mode: 'prorated', type: 'income', monthly: proratedInfo.income.monthly, count: proratedInfo.income.count });
+                this.setProrationNotice('recurring-fixed-expense-note', { mode: 'prorated', type: 'expense', monthly: proratedInfo.expense.monthly, count: proratedInfo.expense.count });
+                this.setProrationNotice('recurring-fixed-net-note', { mode: 'net', expenseCount: proratedInfo.expense.count, incomeCount: proratedInfo.income.count });
                 const netElement = document.getElementById('recurring-fixed-net');
                 if (netElement) {
                     netElement.textContent = `${summary.net < 0 ? '−' : summary.net > 0 ? '+' : ''}${this.formatCurrency(Math.abs(summary.net))}`;
@@ -3838,15 +3943,23 @@
                 setText('loans-next-note', nextEntry ? `${nextEntry.loan.name}: ${fmt(nextEntry.amount)} (cuota ${nextEntry.number}/${nextEntry.loan.installments}).` : 'No hay cuotas pendientes.');
 
                 const monthIncome = this.getTransactionsForMonth(monthKey).filter(t => t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0);
-                if (monthTotal > 0 && monthIncome > 0) {
-                    const ratio = (monthTotal / monthIncome) * 100;
+                // Importe mensual equivalente de las cuotas (las no mensuales se prorratean), igual que en Análisis y en el asistente.
+                const ratioSeries = this.getLoanSeries(new Date());
+                const debtMonthly = ratioSeries.reduce((acc, item) => acc + item.monthlyAmount, 0);
+                const ratioProrated = ratioSeries.filter(item => item.periodMonths > 1);
+                this.setProrationNotice('loans-ratio-proration', {
+                    mode: 'prorated', type: 'expense',
+                    monthly: ratioProrated.reduce((acc, item) => acc + item.monthlyAmount, 0), count: ratioProrated.length
+                });
+                if (debtMonthly > 0 && monthIncome > 0) {
+                    const ratio = (debtMonthly / monthIncome) * 100;
                     setText('loans-ratio', `${ratio.toFixed(0)}%`);
                     setTone('loans-ratio', ratio > 35 ? 'text-apple-red' : ratio > 30 ? 'text-apple-orange' : 'text-apple-green');
                     setText('loans-ratio-note', `${ratio > 35 ? 'Elevado' : ratio > 30 ? 'En el límite' : 'Saludable'}: cuotas frente a los ingresos de ${this.monthLabelLong(monthKey)}. Referencia orientativa: máximo 35%.`);
                 } else {
                     setText('loans-ratio', '—');
                     setTone('loans-ratio', 'text-white');
-                    setText('loans-ratio-note', monthTotal > 0 ? `Sin ingresos registrados en ${this.monthLabelLong(monthKey)}.` : 'Sin cuotas este mes.');
+                    setText('loans-ratio-note', debtMonthly > 0 ? `Sin ingresos registrados en ${this.monthLabelLong(monthKey)}.` : 'Sin cuotas este mes.');
                 }
 
                 // ----- Tarjetas -----
@@ -4607,7 +4720,12 @@
                             <div><span class="text-gray-400">Carga total de deuda este mes:</span> <span class="text-white font-semibold">${fmt(snapshot.debtMonthly)}</span>${snapshot.income > 0 ? ` <span class="text-gray-400">· ${(snapshot.debtMonthly / snapshot.income * 100).toFixed(0)}% de tus ingresos</span>` : ''}</div>
                             <div class="flex flex-wrap gap-1.5">${capacity.map(indicator => chip(indicator.status, indicator.short)).join('')}</div>
                         </div>
-                        ${ratioIndicator && ratioIndicator.status !== 'ok' && ratioIndicator.status !== 'na' ? `<div class="text-[11px] text-gray-400">${escapeHTML(ratioIndicator.message)}</div>` : ''}`;
+                        ${ratioIndicator && ratioIndicator.status !== 'ok' && ratioIndicator.status !== 'na' ? `<div class="text-[11px] text-gray-400">${escapeHTML(ratioIndicator.message)}</div>` : ''}
+                        ${(() => {
+                            const proratedLoans = this.getLoanSeries(new Date()).filter(item => item.periodMonths > 1);
+                            const notice = this.prorationNoticeHtml({ mode: 'prorated', type: 'expense', monthly: proratedLoans.reduce((acc, item) => acc + item.monthlyAmount, 0), count: proratedLoans.length });
+                            return notice ? `<div class="text-[11px] text-gray-400">${notice}</div>` : '';
+                        })()}`;
                 }
 
                 const list = document.getElementById('analysis-loans-list');
@@ -5008,7 +5126,10 @@
                         spent: sumOf(orphanTxs), previousSpent: sumOf(orphanPrevious), budget: 0 });
                 }
                 rows.sort((a, b) => b.spent - a.spent || a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
-                this.categoryExpenseRows = rows;
+                // La tabla solo muestra las categorías con gasto este mes o el mes anterior. El resumen de arriba las sigue
+                // contando todas ("X de N") y el selector de la evolución mantiene todas disponibles.
+                const visibleRows = rows.filter(row => row.spent > 0 || row.previousSpent > 0);
+                this.categoryExpenseRows = visibleRows;
 
                 // Comparativa con flecha y texto (no depende solo del color).
                 const compare = (spent, previous) => {
@@ -5075,10 +5196,21 @@
                 // ----- Tabla -----
                 tbody.innerHTML = '';
                 tfoot.innerHTML = '';
-                empty.classList.toggle('hidden', rows.length > 0);
-                if (rows.length === 0) return;
+                const hiddenCount = rows.length - visibleRows.length;
+                const hiddenNote = document.getElementById('ce-hidden-note');
+                if (hiddenNote) {
+                    hiddenNote.textContent = hiddenCount > 0
+                        ? `No se ${hiddenCount === 1 ? 'muestra 1 categoría' : `muestran ${hiddenCount} categorías`} sin gasto en ${this.monthLabelLong(this.selectedMonth)} ni en ${previousLabel}.`
+                        : '';
+                    hiddenNote.classList.toggle('hidden', hiddenCount === 0);
+                }
+                empty.classList.toggle('hidden', visibleRows.length > 0);
+                empty.textContent = rows.length === 0
+                    ? 'No hay categorías de gasto para mostrar.'
+                    : `Ninguna categoría tiene gasto en ${this.monthLabelLong(this.selectedMonth)} ni en ${previousLabel}.`;
+                if (visibleRows.length === 0) return;
 
-                rows.forEach((row, index) => {
+                visibleRows.forEach((row, index) => {
                     const share = totalSpent > 0 ? (row.spent / totalSpent) * 100 : 0;
                     const comparison = compare(row.spent, row.previousSpent);
                     const expanded = row.spent > 0 && this.expandedCategoryExpenses.has(row.id);
@@ -5676,13 +5808,18 @@
                     el.classList.add(tone);
                 };
                 const forecast = this.getMonthExpenseForecast(this.selectedMonth);
+                // Gasto fijo mensual (prorrateado) del mes seleccionado, para explicar la diferencia con lo que se cobra de verdad.
+                const proratedMonthly = this.getRecurringSummary(new Date(y, m, 0)).prorated.expense.monthly;
                 if (forecast.status === 'current') {
+                    this.setProrationNotice('forecast-proration', { mode: 'charged', amount: forecast.proratedCharged, count: forecast.proratedCount, equivalent: forecast.proratedEquivalent, fallbackMonthly: proratedMonthly });
                     setText('forecast-amount', this.formatCurrency(forecast.projected));
                     setText('forecast-note', `Día ${forecast.elapsed} de ${forecast.daysInMonth}: fijos ${this.formatCurrency(forecast.fixedRegistered + forecast.fixedPending)} + variable a ritmo de ${this.formatCurrency(forecast.variableForecast)}.`);
                 } else if (forecast.status === 'closed') {
+                    this.setProrationNotice('forecast-proration', null);
                     setText('forecast-amount', this.formatCurrency(forecast.total));
                     setText('forecast-note', 'Mes cerrado: gasto real.');
                 } else {
+                    this.setProrationNotice('forecast-proration', null);
                     setText('forecast-amount', '—');
                     setText('forecast-note', 'Mes futuro: todavía no hay datos.');
                 }
@@ -5712,6 +5849,13 @@
 
                 const fixedSpent = currentTxs.filter(t => t.type === 'expense' && this.isRecurringTx(t)).reduce((acc, t) => acc + Number(t.amount), 0);
                 const variableSpent = currentExp - fixedSpent;
+                const proratedTxs = currentTxs.filter(t => t.type === 'expense' && this.isRecurringTx(t) && this.getTxPeriodMonths(t) > 1);
+                this.setProrationNotice('fixed-variable-proration', {
+                    mode: 'charged', count: proratedTxs.length,
+                    amount: proratedTxs.reduce((acc, t) => acc + Number(t.amount), 0),
+                    equivalent: proratedTxs.reduce((acc, t) => acc + Number(t.amount) / this.getTxPeriodMonths(t), 0),
+                    fallbackMonthly: currentExp > 0 ? proratedMonthly : 0
+                });
                 const fixedShare = currentExp > 0 ? (fixedSpent / currentExp) * 100 : 0;
                 const fixedBar = document.getElementById('fixed-variable-bar');
                 if (fixedBar) fixedBar.style.width = `${Math.max(0, Math.min(100, fixedShare))}%`;
@@ -5990,7 +6134,12 @@
                 }
 
                 // Peso de las cuotas de préstamos sobre los ingresos del mes (referencia orientativa: 30-35%).
-                const loanMonthTotal = this.getLoanInstallmentsTotal(this.selectedMonth);
+                // Se usa el importe mensual equivalente (las cuotas no mensuales se prorratean entre 12 meses), igual que en Análisis.
+                const [loanRefYear, loanRefMonth] = this.selectedMonth.split('-').map(Number);
+                const loanSeriesForRatio = this.getLoanSeries(new Date(loanRefYear, loanRefMonth, 0));
+                const loanMonthTotal = loanSeriesForRatio.reduce((acc, item) => acc + item.monthlyAmount, 0);
+                const loanProratedForRatio = loanSeriesForRatio.filter(item => item.periodMonths > 1);
+                const loanProratedText = this.prorationText({ mode: 'prorated', type: 'expense', monthly: loanProratedForRatio.reduce((acc, item) => acc + item.monthlyAmount, 0), count: loanProratedForRatio.length });
                 const loanRatio = income > 0 && loanMonthTotal > 0 ? (loanMonthTotal / income) * 100 : null;
                 if (hasMonthlyData && loanRatio !== null) {
                     if (loanRatio > 35) score -= 15;
@@ -6028,6 +6177,12 @@
                     const monthsText = variableAverage.months === 1 ? '1 mes' : `${variableAverage.months} meses`;
                     annualNote.textContent = `Fijos recurrentes ${signedCurrency(recurringSummary.net)}/mes + variables ${signedCurrency(variableNet)}/mes (media de ${monthsText}${variableAverage.partial ? ', mes en curso incompleto' : ''}).`;
                 }
+
+                this.setProrationNotice('insight-annual-proration', {
+                    mode: 'summary',
+                    expenseMonthly: recurringSummary.prorated.expense.monthly, expenseCount: recurringSummary.prorated.expense.count,
+                    incomeMonthly: recurringSummary.prorated.income.monthly, incomeCount: recurringSummary.prorated.income.count
+                });
 
                 const dueItems = this.getRecurringDue(new Date());
                 this.renderRecurringPanel(recurringSummary, dueItems);
@@ -6068,7 +6223,7 @@
                 if (loanRatio !== null && loanRatio > 30) {
                     recommendations.push({
                         title: loanRatio > 35 ? 'Endeudamiento elevado' : 'Endeudamiento en el límite',
-                        text: `Las cuotas de préstamos suman ${this.formatCurrency(loanMonthTotal)}, un ${loanRatio.toFixed(0)}% de tus ingresos del mes. Como referencia orientativa, conviene no superar el 35% (idealmente el 30%).`,
+                        text: `Las cuotas de préstamos suman ${this.formatCurrency(loanMonthTotal)} al mes, un ${loanRatio.toFixed(0)}% de tus ingresos del mes.${loanProratedText ? ' ' + loanProratedText : ''} Como referencia orientativa, conviene no superar el 35% (idealmente el 30%).`,
                         type: loanRatio > 35 ? 'danger' : 'warning'
                     });
                 }
