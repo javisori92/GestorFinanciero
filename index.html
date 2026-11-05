@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Política de seguridad para GitHub Pages. Los scripts/estilos inline siguen permitidos
+         porque esta versión concentra la aplicación en un único HTML y usa manejadores inline. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com data:; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
     <title>Apple Vault — Gestor Financiero Personal</title>
 
     <!-- Tailwind CSS CDN -->
@@ -775,7 +778,7 @@
                     <div>
                         <label class="block text-xs font-medium text-gray-400 mb-1">Contraseña del Vault</label>
                         <div class="relative">
-                            <input type="password" id="vault-password-input" placeholder="Contraseña de al menos 12 caracteres..." autocomplete="current-password"
+                            <input type="password" id="vault-password-input" placeholder="Introduce tu contraseña..." autocomplete="current-password"
                                 class="w-full px-4 py-3 rounded-xl apple-input text-sm text-white placeholder-gray-500 pr-10"
                                 onkeydown="if(event.key==='Enter'){event.preventDefault();app.unlockVault()}">
                             <button type="button" onclick="app.togglePasswordVisibility('vault-password-input', this)" class="absolute right-3 top-3 text-gray-400 hover:text-white text-xs">
@@ -783,6 +786,7 @@
                             </button>
                         </div>
                     </div>
+                    <p class="text-[10px] text-gray-500 mt-2">Para crear o cambiar la contraseña: utiliza al menos 14 caracteres. Una frase larga y única es más fácil de recordar y más resistente.</p>
                 </div>
 
                 <div class="flex flex-col gap-3">
@@ -1252,7 +1256,7 @@
                             </div>
                         </div>
                         <div class="px-5 pb-5 space-y-4 border-t border-white/10 pt-4">
-                            <form id="lv-form" onsubmit="event.preventDefault(); app.runLoanValuation();" class="space-y-4 text-xs">
+                            <form id="lv-form" autocomplete="off" onsubmit="event.preventDefault(); app.runLoanValuation();" class="space-y-4 text-xs">
                                 <fieldset class="space-y-3">
                                     <legend class="text-[11px] uppercase tracking-wider text-gray-500 mb-1">Datos de la oferta (hoja INE o FEIN)</legend>
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1715,6 +1719,18 @@
                                 Tus datos se cifran localmente con <strong>AES-GCM de 256 bits</strong> y una clave derivada mediante <strong>PBKDF2-HMAC-SHA-256 (600.000 iteraciones)</strong>. Los archivos antiguos con el formato previo siguen siendo compatibles y se actualizan al guardarlos.
                             </p>
 
+                            <div class="pt-2 space-y-1">
+                                <label class="block text-xs text-gray-400" for="autolock-select">Bloqueo automático por inactividad</label>
+                                <select id="autolock-select" onchange="app.setAutoLockMinutes(this.value)" class="apple-input rounded-xl text-xs text-white px-3 py-1.5">
+                                    <option value="5">A los 5 minutos</option>
+                                    <option value="10">A los 10 minutos</option>
+                                    <option value="15">A los 15 minutos</option>
+                                    <option value="30">A los 30 minutos</option>
+                                    <option value="0">Desactivado (no recomendado)</option>
+                                </select>
+                                <p class="text-[11px] text-gray-500">Al bloquear se cierra la sesión y se recarga la página, para que no quede nada descifrado en la memoria ni en la pantalla.</p>
+                            </div>
+
                             <div class="pt-2 flex flex-wrap gap-3">
                                 <button onclick="app.changePasswordModal()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-medium text-white transition">
                                     <i class="fa-solid fa-key text-xs mr-1.5"></i> Cambiar Contraseña del Vault
@@ -1789,17 +1805,24 @@
             static ITERATIONS = 600000;
 
             static async deriveKey(password, salt, iterations = CryptoVaultEngine.ITERATIONS) {
-                const encoder = new TextEncoder();
-                const passwordKey = await crypto.subtle.importKey(
-                    'raw', encoder.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']
-                );
-                return crypto.subtle.deriveKey(
-                    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
-                    passwordKey,
-                    { name: 'AES-GCM', length: 256 },
-                    false,
-                    ['encrypt', 'decrypt']
-                );
+                if (typeof password !== 'string' || password.length === 0) {
+                    throw new Error('La contraseña no es válida.');
+                }
+                const passwordBytes = new TextEncoder().encode(password);
+                try {
+                    const passwordKey = await crypto.subtle.importKey(
+                        'raw', passwordBytes, { name: 'PBKDF2' }, false, ['deriveKey']
+                    );
+                    return await crypto.subtle.deriveKey(
+                        { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+                        passwordKey,
+                        { name: 'AES-GCM', length: 256 },
+                        false,
+                        ['encrypt', 'decrypt']
+                    );
+                } finally {
+                    passwordBytes.fill(0);
+                }
             }
 
             static async encrypt(dataObj, password, options = {}) {
@@ -1807,31 +1830,42 @@
                 const salt = options.salt ? new Uint8Array(options.salt) : crypto.getRandomValues(new Uint8Array(16));
                 const iv = crypto.getRandomValues(new Uint8Array(12));
                 const key = options.key || await this.deriveKey(password, salt, iterations);
-                const jsonStr = JSON.stringify(dataObj);
-                const encryptedBuffer = await crypto.subtle.encrypt(
-                    { name: 'AES-GCM', iv }, key, new TextEncoder().encode(jsonStr)
-                );
-                return JSON.stringify({
-                    version: 2,
-                    kdf: 'PBKDF2-HMAC-SHA-256',
-                    iterations,
-                    salt: Array.from(salt),
-                    iv: Array.from(iv),
-                    ciphertext: Array.from(new Uint8Array(encryptedBuffer))
-                });
+                const plaintext = new TextEncoder().encode(JSON.stringify(dataObj));
+                try {
+                    const encryptedBuffer = await crypto.subtle.encrypt(
+                        { name: 'AES-GCM', iv }, key, plaintext
+                    );
+                    return JSON.stringify({
+                        version: 2,
+                        kdf: 'PBKDF2-HMAC-SHA-256',
+                        iterations,
+                        salt: Array.from(salt),
+                        iv: Array.from(iv),
+                        ciphertext: Array.from(new Uint8Array(encryptedBuffer))
+                    });
+                } finally {
+                    plaintext.fill(0);
+                }
             }
 
             static async decrypt(encryptedPayloadStr, password) {
+                let decryptedBuffer = null;
                 try {
                     const payload = JSON.parse(encryptedPayloadStr);
-                    const ciphertextSource = payload.ciphertext || payload.data;
-                    if (!Array.isArray(payload.salt) || !Array.isArray(payload.iv) || !Array.isArray(ciphertextSource)) {
+                    const ciphertextSource = payload && (payload.ciphertext || payload.data);
+                    if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
+                        (payload.version != null && payload.version !== 2) ||
+                        (payload.kdf != null && payload.kdf !== 'PBKDF2-HMAC-SHA-256') ||
+                        !Array.isArray(payload.salt) || !Array.isArray(payload.iv) || !Array.isArray(ciphertextSource)) {
                         throw new Error('Formato de archivo cifrado inválido');
                     }
-                    if (payload.salt.length !== 16 || payload.iv.length !== 12 || ciphertextSource.length < 16) {
+                    const validBytes = values => values.every(value => Number.isInteger(value) && value >= 0 && value <= 255);
+                    if (payload.salt.length !== 16 || payload.iv.length !== 12 ||
+                        ciphertextSource.length < 16 || !validBytes(payload.salt) ||
+                        !validBytes(payload.iv) || !validBytes(ciphertextSource)) {
                         throw new Error('El archivo cifrado está incompleto o tiene un formato inválido');
                     }
-                    // Older exports omit `iterations`; they used 100,000 iterations.
+                    // Las exportaciones antiguas sin `iterations` usaban 100.000 iteraciones.
                     const iterations = payload.iterations == null ? 100000 : Number(payload.iterations);
                     if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 2000000) {
                         throw new Error('Parámetros de derivación no válidos');
@@ -1839,13 +1873,16 @@
                     const salt = new Uint8Array(payload.salt);
                     const iv = new Uint8Array(payload.iv);
                     const key = await this.deriveKey(password, salt, iterations);
-                    const decryptedBuffer = await crypto.subtle.decrypt(
+                    decryptedBuffer = await crypto.subtle.decrypt(
                         { name: 'AES-GCM', iv }, key, new Uint8Array(ciphertextSource)
                     );
-                    return JSON.parse(new TextDecoder().decode(decryptedBuffer));
+                    const plaintext = new TextDecoder().decode(decryptedBuffer);
+                    return JSON.parse(plaintext);
                 } catch (e) {
                     console.error('Error al abrir la bóveda:', e);
                     throw new Error('Contraseña incorrecta o archivo dañado.');
+                } finally {
+                    if (decryptedBuffer) new Uint8Array(decryptedBuffer).fill(0);
                 }
             }
         }
@@ -1855,7 +1892,6 @@
          */
         class FinanceApp {
             constructor() {
-                this.masterPassword = null;
                 this.cryptoKey = null;
                 this.vaultSalt = null;
                 this.fileHandle = null;
@@ -1895,6 +1931,14 @@
                 this.updateLocalVaultButton();
                 this.updateStorageStatus();
                 this.updateHeaderControlsVisibility();
+                // Tras un bloqueo la página se recarga: se avisa del motivo y se empieza a vigilar la inactividad.
+                let lockNotice = null;
+                try {
+                    lockNotice = sessionStorage.getItem('apple_vault_lock_notice');
+                    sessionStorage.removeItem('apple_vault_lock_notice');
+                } catch (error) { /* sin sessionStorage */ }
+                if (lockNotice) this.showToast(lockNotice === 'inactivity' ? 'Bóveda bloqueada por inactividad.' : 'Bóveda bloqueada.', 'info');
+                this.startAutoLockWatch();
             }
 
             updateHeaderControlsVisibility() {
@@ -1936,8 +1980,8 @@
                 const status = document.getElementById('sidebar-file-status');
                 const syncText = document.getElementById('sync-text');
                 if (status) {
-                    const label = this.masterPassword ? 'Bóveda desbloqueada' : 'Bóveda bloqueada';
-                    status.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${this.masterPassword ? 'bg-apple-green' : 'bg-gray-500'}"></span> ${label}`;
+                    const label = this.isVaultUnlocked() ? 'Bóveda desbloqueada' : 'Bóveda bloqueada';
+                    status.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${this.isVaultUnlocked() ? 'bg-apple-green' : 'bg-gray-500'}"></span> ${label}`;
                 }
                 if (syncText && !this.fileHandle) {
                     syncText.textContent = safeStorageGet('apple_vault_encrypted_v2') ? 'Copia local cifrada' : 'Sin guardar';
@@ -1951,7 +1995,9 @@
                 const button = document.getElementById('theme-toggle-btn');
                 if (button) {
                     const isDark = document.documentElement.classList.contains('dark');
-                    button.innerHTML = `<i class="fa-solid ${isDark ? 'fa-sun' : 'fa-moon'} text-xs"></i>`;
+                    const icon = document.createElement('i');
+                    icon.className = `fa-solid ${isDark ? 'fa-sun' : 'fa-moon'} text-xs`;
+                    button.replaceChildren(icon);
                     button.title = isDark ? 'Cambiar al tema claro' : 'Cambiar al tema oscuro';
                 }
             }
@@ -1976,9 +2022,36 @@
                 };
             }
 
+            isVaultUnlocked() {
+                return Boolean(this.cryptoKey && this.vaultSalt);
+            }
+
             async prepareEncryptionKey(password) {
-                this.vaultSalt = crypto.getRandomValues(new Uint8Array(16));
-                this.cryptoKey = await CryptoVaultEngine.deriveKey(password, this.vaultSalt, CryptoVaultEngine.ITERATIONS);
+                const salt = crypto.getRandomValues(new Uint8Array(16));
+                let key;
+                try {
+                    key = await CryptoVaultEngine.deriveKey(password, salt, CryptoVaultEngine.ITERATIONS);
+                } finally {
+                    password = '';
+                }
+                this.vaultSalt = salt;
+                this.cryptoKey = key;
+            }
+
+            validateNewPassword(password) {
+                if (typeof password !== 'string' || password.length < 14) {
+                    return 'Usa una contraseña de al menos 14 caracteres.';
+                }
+                if (password.length > 1024 || /[\u0000-\u001f\u007f]/.test(password)) {
+                    return 'La contraseña contiene caracteres no admitidos o es demasiado larga.';
+                }
+                const normalized = password.toLocaleLowerCase('es-ES');
+                const common = new Set(['12345678901234', 'password123456', 'contraseña1234', 'qwertyuiop1234', 'abcdefghijklmn']);
+                if (common.has(normalized) || /^(.)\1{13,}$/.test(password) ||
+                    /^(0123456789|1234567890|qwertyuiop|asdfghjklñ|abcdefghijklmn)$/i.test(password)) {
+                    return 'Esa contraseña es demasiado predecible. Elige una frase larga y única.';
+                }
+                return null;
             }
 
             normalizeVaultData(raw) {
@@ -2090,10 +2163,14 @@
                 const input = document.getElementById(inputId);
                 if (input.type === 'password') {
                     input.type = 'text';
-                    btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
+                    const icon = document.createElement('i');
+                    icon.className = 'fa-solid fa-eye-slash';
+                    btn.replaceChildren(icon);
                 } else {
                     input.type = 'password';
-                    btn.innerHTML = '<i class="fa-solid fa-eye"></i>';
+                    const icon = document.createElement('i');
+                    icon.className = 'fa-solid fa-eye';
+                    btn.replaceChildren(icon);
                 }
             }
 
@@ -2108,9 +2185,10 @@
                     this.db.selectedMonth = this.selectedMonth;
                     this.syncMonthPicker();
                     this.updateMonthBadgeDisplay();
-                    this.masterPassword = password;
                     this.fileHandle = null; // Assign a file handle only after successful decryption.
                     await this.prepareEncryptionKey(password); // Upgrade older vaults to the current KDF on next save.
+                    document.getElementById('vault-password-input').value = '';
+                    password = '';
                     document.getElementById('lock-screen').classList.add('hidden');
                     document.getElementById('app-container').classList.remove('hidden');
                     this.updateStorageStatus();
@@ -2121,19 +2199,21 @@
                     await this.saveData({ silent: true, skipFile: true });
                     return true;
                 } catch (err) {
-                    this.masterPassword = null;
+                    document.getElementById('vault-password-input').value = '';
+                    password = '';
                     this.cryptoKey = null;
                     this.vaultSalt = null;
                     this.fileHandle = null;
+                    this.db = this.getEmptyDefaultDB();
                     this.showToast(err.message || 'No se pudo abrir la bóveda.', 'error');
                     return false;
                 }
             }
 
             async openVaultFromFile() {
-                if (safeStorageGet('apple_vault_encrypted_v2') && !this.masterPassword &&
+                if (safeStorageGet('apple_vault_encrypted_v2') && !this.isVaultUnlocked() &&
                     !confirm('Abrir otro archivo reemplazará la copia cifrada local de este navegador por la bóveda que estás importando. Si necesitas conservar ambas, exporta antes una copia independiente. ¿Continuar?')) return;
-                const password = document.getElementById('vault-password-input').value;
+                let password = document.getElementById('vault-password-input').value;
                 if (!password) {
                     this.showToast('Introduce la contraseña de la bóveda.', 'error');
                     return;
@@ -2161,6 +2241,7 @@
                         });
                     }
                     const opened = await this.unlockVaultWithFile(fileText, password);
+                    password = '';
                     if (!opened) return;
                     if (pendingHandle) {
                         this.fileHandle = pendingHandle;
@@ -2173,6 +2254,8 @@
                     }
                     this.updateStorageStatus();
                 } catch (e) {
+                    password = '';
+                    document.getElementById('vault-password-input').value = '';
                     if (e.name !== 'AbortError') this.showToast('Error al abrir el archivo: ' + e.message, 'error');
                 }
             }
@@ -2183,7 +2266,7 @@
             }
 
             async openLocalVault() {
-                const password = document.getElementById('vault-password-input').value;
+                let password = document.getElementById('vault-password-input').value;
                 if (!password) {
                     this.showToast('Introduce la contraseña de la bóveda.', 'error');
                     return;
@@ -2195,6 +2278,7 @@
                     return;
                 }
                 const opened = await this.unlockVaultWithFile(encrypted, password);
+                password = '';
                 if (opened) {
                     this.fileHandle = null;
                     document.getElementById('sync-text').textContent = 'Copia local cifrada';
@@ -2205,15 +2289,17 @@
             async createNewVaultModal() {
                 if (safeStorageGet('apple_vault_encrypted_v2') &&
                     !confirm('Ya existe una bóveda cifrada local. Crear otra sustituirá esa copia local. Exporta primero la bóveda existente si necesitas conservarla. ¿Crear la nueva bóveda?')) return;
-                const password = document.getElementById('vault-password-input').value;
-                if (!password || password.length < 12) {
-                    this.showToast('Usa una contraseña de al menos 12 caracteres.', 'error');
+                let password = document.getElementById('vault-password-input').value;
+                const passwordError = this.validateNewPassword(password);
+                if (passwordError) {
+                    this.showToast(passwordError, 'error');
                     return;
                 }
-                this.masterPassword = password;
                 this.fileHandle = null;
                 this.db = this.getEmptyDefaultDB();
                 await this.prepareEncryptionKey(password);
+                password = '';
+                document.getElementById('vault-password-input').value = '';
                 document.getElementById('lock-screen').classList.add('hidden');
                 document.getElementById('app-container').classList.remove('hidden');
                 this.updateStorageStatus();
@@ -2224,17 +2310,22 @@
 
             async loadDemoData() {
                 const hasLocalVault = Boolean(safeStorageGet('apple_vault_encrypted_v2'));
-                if (!this.masterPassword && hasLocalVault && !confirm('La demo sustituirá la copia cifrada que guardaste en este navegador. ¿Continuar?')) return;
-                if (this.masterPassword && this.db.transactions.length && !confirm('Los datos actuales se sustituirán por datos de demostración. Se desvinculará el archivo abierto para evitar sobrescribirlo. ¿Continuar?')) return;
-                const password = this.masterPassword || document.getElementById('vault-password-input').value || '';
-                if (password.length < 12) {
-                    this.showToast('Para probar la demo, introduce una contraseña de al menos 12 caracteres.', 'error');
-                    return;
+                const unlocked = this.isVaultUnlocked();
+                if (!unlocked && hasLocalVault && !confirm('La demo sustituirá la copia cifrada que guardaste en este navegador. ¿Continuar?')) return;
+                if (unlocked && this.db.transactions.length && !confirm('Los datos actuales se sustituirán por datos de demostración. Se desvinculará el archivo abierto para evitar sobrescribirlo. ¿Continuar?')) return;
+                if (!unlocked) {
+                    let password = document.getElementById('vault-password-input').value || '';
+                    const passwordError = this.validateNewPassword(password);
+                    if (passwordError) {
+                        this.showToast(passwordError, 'error');
+                        return;
+                    }
+                    await this.prepareEncryptionKey(password);
+                    password = '';
+                    document.getElementById('vault-password-input').value = '';
                 }
-                this.masterPassword = password;
                 this.fileHandle = null;
                 this.db = this.generateDemoDataset();
-                await this.prepareEncryptionKey(password);
                 document.getElementById('lock-screen').classList.add('hidden');
                 document.getElementById('app-container').classList.remove('hidden');
                 this.updateStorageStatus();
@@ -2243,22 +2334,115 @@
                 this.showToast('Datos de demostración cargados y guardados de forma cifrada.', 'success');
             }
 
-            lockVault() {
-                this.masterPassword = null;
-                this.cryptoKey = null;
-                this.vaultSalt = null;
-                this.fileHandle = null;
-                this.db = this.getEmptyDefaultDB();
-                document.getElementById('app-container').classList.add('hidden');
-                document.getElementById('lock-screen').classList.remove('hidden');
-                document.getElementById('vault-password-input').value = '';
-                this.updateLocalVaultButton();
-                this.updateStorageStatus();
-                this.showToast('Bóveda bloqueada.', 'info');
+            // Bloquea la sesión: espera los guardados pendientes (con la clave aún en memoria), borra claves, datos y
+            // lo pintado en pantalla, y recarga la página para que no quede nada descifrado en la memoria ni en el DOM.
+            async lockVault({ reason = 'manual' } = {}) {
+                if (this._locking) return;
+                this._locking = true;
+                try {
+                    // Un guardado pendiente se queda sin clave si se bloquea antes de que termine; se espera hasta 5 s.
+                    try {
+                        await Promise.race([this.saveQueue, new Promise(resolve => setTimeout(resolve, 5000))]);
+                    } catch (error) { /* los errores de guardado ya se notificaron al usuario */ }
+
+                    this.cryptoKey = null;
+                    this.vaultSalt = null;
+                    this.fileHandle = null;
+                    Object.values(this.charts || {}).forEach(chart => {
+                        try { if (chart && typeof chart.destroy === 'function') chart.destroy(); } catch (e) { /* limpieza defensiva */ }
+                    });
+                    this.charts = {};
+                    this._lastValuation = null;
+                    this.recurringDueItems = [];
+                    this.expandedLoans = new Set();
+                    this.expandedCategoryExpenses = new Set();
+                    this._loanTxCache = null;
+                    this.categoryExpenseRows = [];
+                    this._categoryTrendSignature = null;
+                    this.categoryTrendId = undefined;
+                    this._settleLoanId = null;
+                    this.db = this.getEmptyDefaultDB();
+                    document.getElementById('app-container').classList.add('hidden');
+                    document.getElementById('lock-screen').classList.remove('hidden');
+                    document.getElementById('vault-password-input').value = '';
+                    const newPasswordInput = document.getElementById('new-pass-input');
+                    if (newPasswordInput) newPasswordInput.value = '';
+                    this.wipeRenderedData();
+                    this.updateLocalVaultButton();
+                    this.updateStorageStatus();
+                    try { sessionStorage.setItem('apple_vault_lock_notice', reason); } catch (error) { /* sin sessionStorage: solo se pierde el aviso */ }
+                    window.location.reload();
+                } finally {
+                    this._locking = false;
+                }
+            }
+
+            // Vacía lo que se pintó con datos financieros (tablas, listas, gráficos, formularios y ventanas).
+            // La recarga que sigue al bloqueo lo borra todo; esto cubre el instante previo y el caso de que no se produzca.
+            wipeRenderedData() {
+                document.querySelectorAll('tbody, tfoot, [id$="-list"], [id$="-grid"], #modal-container, #lv-result, #lv-sim-result, #analysis-loans-summary').forEach(element => { element.innerHTML = ''; });
+                document.querySelectorAll('canvas').forEach(canvas => { canvas.width = canvas.width; });
+                document.querySelectorAll('input, textarea').forEach(field => {
+                    if (field.type === 'checkbox' || field.type === 'radio') field.checked = false;
+                    else field.value = '';
+                });
+                document.querySelectorAll('select').forEach(select => { select.selectedIndex = 0; });
+            }
+
+            // ---------- Bloqueo automático por inactividad ----------
+            getAutoLockMinutes() {
+                const stored = safeStorageGet('apple_vault_autolock_minutes');
+                if (stored === null || stored === undefined) return 10;
+                const minutes = Number(stored);
+                return [0, 5, 10, 15, 30].includes(minutes) ? minutes : 10;
+            }
+
+            setAutoLockMinutes(value) {
+                const minutes = Number(value);
+                if (![0, 5, 10, 15, 30].includes(minutes)) return;
+                safeStorageSet('apple_vault_autolock_minutes', String(minutes));
+                this.registerActivity();
+                this.showToast(minutes === 0
+                    ? 'Bloqueo automático desactivado.'
+                    : `La bóveda se bloqueará tras ${minutes} minutos sin actividad.`, 'info');
+            }
+
+            registerActivity() {
+                this._lastActivity = Date.now();
+                this._autoLockWarned = false;
+            }
+
+            startAutoLockWatch() {
+                if (this._autoLockStarted) return;
+                this._autoLockStarted = true;
+                const select = document.getElementById('autolock-select');
+                if (select) select.value = String(this.getAutoLockMinutes());
+                this._lastActivity = Date.now();
+                ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'input'].forEach(type => {
+                    document.addEventListener(type, () => this.registerActivity(), { passive: true, capture: true });
+                });
+                // Con la pestaña en segundo plano los temporizadores se frenan: se comprueba al volver.
+                document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this.checkAutoLock(); });
+                window.addEventListener('focus', () => this.checkAutoLock());
+                this._autoLockTimer = setInterval(() => this.checkAutoLock(), 5000);
+            }
+
+            checkAutoLock() {
+                if (!this.isVaultUnlocked() || this._locking) return;
+                const minutes = this.getAutoLockMinutes();
+                if (!minutes) return;
+                const limit = minutes * 60000;
+                const idle = Date.now() - (this._lastActivity || Date.now());
+                if (idle >= limit) {
+                    this.lockVault({ reason: 'inactivity' });
+                } else if (limit - idle <= 30000 && !this._autoLockWarned) {
+                    this._autoLockWarned = true;
+                    this.showToast('La bóveda se bloqueará en menos de 30 segundos por inactividad. Mueve el ratón o toca la pantalla para continuar.', 'info');
+                }
             }
 
             async saveData(options = {}) {
-                if (!this.masterPassword || !this.cryptoKey || !this.vaultSalt) {
+                if (!this.isVaultUnlocked()) {
                     this.showToast('La bóveda está bloqueada o no tiene una clave activa.', 'error');
                     return false;
                 }
@@ -2269,7 +2453,7 @@
                 const task = async () => {
                     let encryptedStr;
                     try {
-                        encryptedStr = await CryptoVaultEngine.encrypt(snapshot, this.masterPassword, {
+                        encryptedStr = await CryptoVaultEngine.encrypt(snapshot, null, {
                             key: this.cryptoKey,
                             salt: this.vaultSalt,
                             iterations: CryptoVaultEngine.ITERATIONS
@@ -2317,12 +2501,12 @@
             }
 
             async saveVaultToFileSavePicker() {
-                if (!this.masterPassword || !this.cryptoKey || !this.vaultSalt) {
+                if (!this.isVaultUnlocked()) {
                     this.showToast('Desbloquea primero la bóveda.', 'error');
                     return;
                 }
                 try {
-                    const encryptedStr = await CryptoVaultEngine.encrypt(this.db, this.masterPassword, {
+                    const encryptedStr = await CryptoVaultEngine.encrypt(this.db, null, {
                         key: this.cryptoKey, salt: this.vaultSalt, iterations: CryptoVaultEngine.ITERATIONS
                     });
                     if (window.isSecureContext && 'showSaveFilePicker' in window) {
@@ -5743,7 +5927,7 @@
                     const monthlyClass = row.monthlyBalance > 0 ? 'text-apple-green' : row.monthlyBalance < 0 ? 'text-apple-red' : 'text-gray-300';
                     const cumulativeClass = row.cumulativeBalance > 0 ? 'text-apple-green' : row.cumulativeBalance < 0 ? 'text-apple-red' : 'text-gray-300';
                     tr.innerHTML = `
-                        <td class="p-3 text-white font-medium whitespace-nowrap">${row.label}</td>
+                        <td class="p-3 text-white font-medium whitespace-nowrap">${escapeHTML(row.label)}</td>
                         <td class="p-3 text-right text-apple-green font-mono whitespace-nowrap">${this.formatCurrency(row.income)}</td>
                         <td class="p-3 text-right text-apple-red font-mono whitespace-nowrap">${this.formatCurrency(row.expense)}</td>
                         <td class="p-3 text-right ${monthlyClass} font-mono font-semibold whitespace-nowrap">${this.formatCurrency(row.monthlyBalance)}</td>
@@ -6315,7 +6499,8 @@
                         <div class="space-y-3 text-xs">
                             <div>
                                 <label class="block text-gray-400 mb-1">Nueva Contraseña</label>
-                                <input type="password" id="new-pass-input" minlength="12" autocomplete="new-password" placeholder="Mínimo 12 caracteres..." class="w-full px-3 py-2 apple-input rounded-xl text-white">
+                                <input type="password" id="new-pass-input" minlength="14" maxlength="1024" autocomplete="new-password" placeholder="Mínimo 14 caracteres..." class="w-full px-3 py-2 apple-input rounded-xl text-white">
+                                <p class="text-[10px] text-gray-500 mt-1">Mejor una frase larga, única y difícil de adivinar. No reutilices la contraseña de otros servicios.</p>
                             </div>
 
                             <div class="pt-3 flex justify-end gap-2">
@@ -6328,23 +6513,30 @@
             }
 
             async applyNewPassword() {
-                const newPass = document.getElementById('new-pass-input').value;
-                if (!newPass || newPass.length < 12) {
-                    this.showToast('Usa una contraseña de al menos 12 caracteres.', 'error');
+                const input = document.getElementById('new-pass-input');
+                let newPass = input.value;
+                const passwordError = this.validateNewPassword(newPass);
+                if (passwordError) {
+                    this.showToast(passwordError, 'error');
                     return;
                 }
-                const oldPassword = this.masterPassword;
+                if (!this.isVaultUnlocked()) {
+                    this.showToast('La bóveda está bloqueada. Desbloquéala antes de cambiar la contraseña.', 'error');
+                    return;
+                }
                 const oldKey = this.cryptoKey;
                 const oldSalt = this.vaultSalt;
                 try {
-                    this.masterPassword = newPass;
                     await this.prepareEncryptionKey(newPass);
+                    newPass = '';
+                    input.value = '';
                     const saved = await this.saveData({ silent: true });
                     if (!saved) throw new Error('No se pudo confirmar el guardado cifrado.');
                     this.closeModal();
                     this.showToast('Contraseña cambiada y bóveda guardada con la nueva clave.', 'success');
                 } catch (e) {
-                    this.masterPassword = oldPassword;
+                    newPass = '';
+                    input.value = '';
                     this.cryptoKey = oldKey;
                     this.vaultSalt = oldSalt;
                     await this.saveData({ silent: true });
